@@ -1,0 +1,44 @@
+{
+	"name": "template",
+	"servePlaceIds": [ 0 ],
+	"tree": {
+		"$className": "DataModel",
+
+		"Workspace": {
+			"$className": "Workspace",
+			"$ignoreUnknownInstances": true,
+
+			"$properties": {
+				"StreamingEnabled": false
+			}
+		},
+		"ReplicatedFirst": {
+			"$className": "ReplicatedFirst",
+			"$ignoreUnknownInstances": false,
+
+			"Client": { "$path": "Client" }
+		},
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"$ignoreUnknownInstances": false,
+			"Shared": {
+				"$className": "Folder",
+
+				"Assets": {"$path": "Assets"},
+				"Library": {"$path": "Library"}
+			}
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"$ignoreUnknownInstances": false,
+
+			"Server": {
+				"$path": "Server"
+			}
+		},
+		"StarterGui": {
+			"$className": "StarterGui",
+			"$ignoreUnknownInstances": true
+		}
+	}
+}
