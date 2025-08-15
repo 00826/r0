@@ -1,6 +1,6 @@
 {
-	"name": "template",
-	"servePlaceIds": [ 0 ],
+	"name": "r0",
+	"servePlaceIds": [ 138517315713347 ],
 	"tree": {
 		"$className": "DataModel",
 
@@ -10,6 +10,16 @@
 
 			"$properties": {
 				"StreamingEnabled": false
+			},
+
+			"Entities": { "$className": "Folder" }
+		},
+		"Players": {
+			"$className": "Players",
+			"$ignoreUnknownInstances": true,
+
+			"$properties": {
+				"CharacterAutoLoads": false
 			}
 		},
 		"ReplicatedFirst": {
@@ -24,8 +34,7 @@
 			"Shared": {
 				"$className": "Folder",
 
-				"Assets": {"$path": "Assets"},
-				"Library": {"$path": "Library"}
+				"r0": { "$path": "r0" }
 			}
 		},
 		"ServerScriptService": {

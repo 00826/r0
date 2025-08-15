@@ -1,2 +1,3 @@
-# template
-ssa template with mit license
+# r0
+
+zero-limb humanoidless character controller

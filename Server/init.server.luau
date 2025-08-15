@@ -5,6 +5,8 @@
 workspace:SetAttribute("initserver", (function()
 	local start = os.clock()
 	for _, module in ipairs{
+		script:WaitForChild("CollisionGroups");
+		script:WaitForChild("r0server");
 		script:WaitForChild("_closer");
 	} do
 		local s, e = pcall(require, module)
