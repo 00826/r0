@@ -45,9 +45,13 @@
 				"$path": "Server"
 			}
 		},
-		"StarterGui": {
-			"$className": "StarterGui",
-			"$ignoreUnknownInstances": true
+		"StarterPlayer": {
+			"$className": "StarterPlayer",
+			"StarterPlayerScripts": {
+				"$className": "StarterPlayerScripts",
+				"PlayerModule": { "$className": "ModuleScript" },
+				"PlayerScriptsLoader": { "$className": "LocalScript" }
+			}
 		}
 	}
 }

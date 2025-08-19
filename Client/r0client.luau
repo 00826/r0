@@ -13,10 +13,12 @@ local LocalPlayer = Players.LocalPlayer
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
 local r0 = require(Shared:WaitForChild("r0"))
+local CameraController = r0.CameraController
+local InputController = r0.InputController
 
-local PlayerScripts = LocalPlayer:WaitForChild("PlayerScripts")
+--[[local PlayerScripts = LocalPlayer:WaitForChild("PlayerScripts")
 local PlayerModule = PlayerScripts:WaitForChild("PlayerModule")
-local ControlModule = require(PlayerModule:WaitForChild("ControlModule"))::any
+local ControlModule = require(PlayerModule:WaitForChild("ControlModule"))::any]]
 
 local Camera = workspace.CurrentCamera
 
@@ -113,10 +115,18 @@ end
 
 UserInputService.InputEnded:Connect(inputended)
 
+local function preferredinputchanged()
+	local pi = InputController.PreferredInput
+	InputController.rebind(pi)
+end
+
+preferredinputchanged()
+InputController.preferredinputchanged():Connect(preferredinputchanged)
+
 local function step(dt: number)
 	debug.profilebegin("r0step")
 
-	r0input.InputVector = ControlModule:GetMoveVector()
+	r0input.InputVector = InputController.Vector
 	r0input.CameraCFrame = Camera.CFrame
 
 	if r0input.Vertical == -1 then

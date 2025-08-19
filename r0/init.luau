@@ -94,6 +94,9 @@ export type Character = typeof(script.StarterCharacter)
 ---
 --- zero-limb humanoidless character controller
 local r0 = {
+	CameraController = require(script:WaitForChild("CameraController"));
+	InputController = require(script:WaitForChild("InputController"));
+
 	Input = {
 		--- empty raycastparams
 		RaycastParams = RaycastParams.new();
