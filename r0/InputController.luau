@@ -149,12 +149,12 @@ end
 function InputController.touch(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
 	local touchgui = InputController.TouchGui
 	if not touchgui then return end
-	local touchguiapos = touchgui.AbsolutePosition
-	local touchguiasize = touchgui.AbsoluteSize
 
 	local thumbstickframe = (touchgui::any).ThumbstickFrame::Frame
+	local thumbstickframeapos = thumbstickframe.AbsolutePosition
+	local thumbstickframeasize = thumbstickframe.AbsoluteSize
 
-	local netinset = vector2tovector3(thumbstickframe.AbsolutePosition - touchgui.AbsolutePosition)
+	local netinset = vector2tovector3(thumbstickframeapos - touchgui.AbsolutePosition)
 	local inputposition = inputobject.Position - netinset
 
 	local ring = (thumbstickframe::any).Ring::Frame
@@ -165,7 +165,7 @@ function InputController.touch(action: string, inputstate: Enum.UserInputState, 
 			return Enum.ContextActionResult.Pass
 		end
 
-		if isinputinbounds(touchguiapos, touchguiasize, inputobject) then
+		if isinputinbounds(thumbstickframeapos, thumbstickframeasize, inputobject) then
 			InputController.TouchObject = inputobject
 
 			InputController.TouchCurrentPosition = inputposition
