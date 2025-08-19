@@ -78,8 +78,9 @@ local InputController = {
 		[Enum.PreferredInput.Touch] = Enum.ContextActionPriority.High.Value;
 	};
 
-	--- [[ keyboard ]]
-	KeyboardSigns = table.create(4, 0); --- [ 1 forward, 2 backward, 3 left, 4 right ]
+	--- `inputvector = Vector3.new(t[1] + t[2], 0, t[3] + t[4])`
+	KeyboardSigns = table.create(4, 0);
+	--- `Enum.KeyCode -> { Offset: number; Sign: number; }` conversion table
 	KeyboardMap = {
 		[Enum.KeyCode.W] = { Offset = 1; Sign = -1; };
 		[Enum.KeyCode.S] = { Offset = 2; Sign = 1; };
@@ -88,40 +89,51 @@ local InputController = {
 
 		[Enum.KeyCode.Up] = { Offset = 1; Sign = -1; };
 		[Enum.KeyCode.Down] = { Offset = 2; Sign = 1; };
-		[Enum.KeyCode.Left] = { Offset = 3; Sign = -1; };
-		[Enum.KeyCode.Right] = { Offset = 4; Sign = 1; };
 	};
 
-	--- [[ gamepad ]]
+	--- gamepad L3 deadzone
 	GamepadDeadzone = 0.1;
 
-	--- [[ touch ]]
+	--- current touch inputobject
 	TouchObject = nil :: InputObject?;
+	--- touch thumbstick start position
 	TouchStartPosition = Vector3.zero;
+	--- touch thumbstick current position
 	TouchCurrentPosition = Vector3.zero;
+	--- touch thumbstick (L3) deadzone
 	TouchDeadzone = 0.1;
 
+	--- current touch gui \
+	--- touchgui is always instantiated
+	--- regardless of current input \
+	--- for consistency
 	TouchGui = nil :: ScreenGui?;
+
+	--- `Enum.DisplaySize -> touch thumbstick ring size` conversion table
 	ThumbstickRingMap = {
 		[Enum.DisplaySize.Small] = UDim2.fromOffset(72, 72);
 		[Enum.DisplaySize.Medium] = UDim2.fromOffset(96, 96);
 		[Enum.DisplaySize.Large] = UDim2.fromOffset(128, 128);
 	};
+	--- `Enum.DisplaySize -> touch thumbstick circle size` conversion table
 	ThumbstickCircleMap = {
 		[Enum.DisplaySize.Small] = UDim2.fromOffset(36, 36);
 		[Enum.DisplaySize.Medium] = UDim2.fromOffset(48, 48);
 		[Enum.DisplaySize.Large] = UDim2.fromOffset(64, 64);
 	};
+	--- `Enum.DisplaySize -> touch thumbstickframe size` conversion table
 	ThumbstickSizeMap = {
 		[Enum.DisplaySize.Small] = UDim2.new(0.4, 0, 0.667, 0);
 		[Enum.DisplaySize.Medium] = UDim2.new(0.4, 0, 0.667, 0);
 		[Enum.DisplaySize.Large] = UDim2.new(0.4, 0, 0.667, 0);
 	};
+	--- `Enum.DisplaySize -> touch thumbstickframe position` conversion table
 	ThumbstickPositionMap = {
 		[Enum.DisplaySize.Small] = UDim2.new(0, 0, 0.333, 0);
 		[Enum.DisplaySize.Medium] = UDim2.new(0, 0, 0.333, 0);
 		[Enum.DisplaySize.Large] = UDim2.new(0, 0, 0.333, 0);
 	};
+	--- `Enum.PreferredInput -> touchgui visibility` conversion table
 	TouchGuiVisibility = {
 		[Enum.PreferredInput.Gamepad] = false;
 		[Enum.PreferredInput.KeyboardAndMouse] = false;
@@ -143,9 +155,56 @@ function InputController.rebind(preferredinput: Enum.PreferredInput)
 		ContextActionService:BindActionAtPriority("r0Input", InputController.gamepad, false, InputController.ActionPriorities[preferredinput], Enum.KeyCode.Thumbstick1)
 	elseif preferredinput == Enum.PreferredInput.Touch then
 		ContextActionService:BindActionAtPriority("r0Input", InputController.touch, false, InputController.ActionPriorities[preferredinput], Enum.UserInputType.Touch)
+	else
+		warn("unaccounted preferredinput:", preferredinput.Name)
 	end
 end
 
+--- internally-bound by `InputController.rebind(Enum.PreferredInput.KeyboardAndMouse)`
+function InputController.keyboard(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+	local entry = InputController.KeyboardMap[inputobject.KeyCode]
+	if not entry then return end
+
+	--[[{
+		[1] = forward
+		[2] = backward
+		[3] = left
+		[4] = right
+	}]]
+	local keysigns = InputController.KeyboardSigns
+	keysigns[entry.Offset] = (inputstate == Enum.UserInputState.Begin) and entry.Sign or 0
+
+	if inputstate == Enum.UserInputState.Cancel then
+		InputController.Vector = Vector3.zero
+	else
+		InputController.Vector = Vector3.new(keysigns[3] + keysigns[4], 0, keysigns[1] + keysigns[2])
+	end
+	
+	return Enum.ContextActionResult.Pass
+end
+
+--- internally-bound by `InputController.rebind(Enum.PreferredInput.Gamepad)`
+function InputController.gamepad(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+	if inputstate == Enum.UserInputState.Cancel then
+		InputController.Vector = Vector3.zero
+		return Enum.ContextActionResult.Sink
+	end
+
+	if inputobject.KeyCode ~= Enum.KeyCode.Thumbstick1 then return end
+
+	local inputposition = inputobject.Position
+	local distance = vector.magnitude(inputposition::any)
+	if distance > InputController.GamepadDeadzone then
+		local a = math.map(math.clamp(distance, 0, 1), InputController.GamepadDeadzone, 1, 0, 1)
+		InputController.Vector = Vector3.new(inputposition.X * a, 0, -inputposition.Y * a)
+	else
+		InputController.Vector = Vector3.zero
+	end
+
+	return Enum.ContextActionResult.Sink
+end
+
+--- internally-bound by `InputController.rebind(Enum.PreferredInput.Touch)`
 function InputController.touch(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
 	local touchgui = InputController.TouchGui
 	if not touchgui then return end
@@ -229,44 +288,9 @@ function InputController.touch(action: string, inputstate: Enum.UserInputState, 
 	return
 end
 
-function InputController.keyboard(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
-	local entry = InputController.KeyboardMap[inputobject.KeyCode]
-	if not entry then return end
-
-	local ksigns = InputController.KeyboardSigns
-	ksigns[entry.Offset] = (inputstate == Enum.UserInputState.Begin) and entry.Sign or 0
-
-	if inputstate == Enum.UserInputState.Cancel then
-		InputController.Vector = Vector3.zero
-	else
-		InputController.Vector = Vector3.new(ksigns[3] + ksigns[4], 0, ksigns[1] + ksigns[2])
-	end
-	
-	return Enum.ContextActionResult.Pass
-end
-
-function InputController.gamepad(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
-	if inputstate == Enum.UserInputState.Cancel then
-		InputController.Vector = Vector3.zero
-		return Enum.ContextActionResult.Sink
-	end
-
-	if inputobject.KeyCode ~= Enum.KeyCode.Thumbstick1 then return end
-
-	local inputposition = inputobject.Position
-	local distance = vector.magnitude(inputposition::any)
-	if distance > InputController.GamepadDeadzone then
-		local a = math.map(math.clamp(distance, 0, 1), InputController.GamepadDeadzone, 1, 0, 1)
-		InputController.Vector = Vector3.new(inputposition.X * a, 0, -inputposition.Y * a)
-	else
-		InputController.Vector = Vector3.zero
-	end
-
-	return Enum.ContextActionResult.Sink
-end
-
 --- returns an empty touchgui
 function InputController.createtouchgui(playergui: PlayerGui)
+	--- base touchgui
 	local touchgui = Instance.new("ScreenGui")
 	touchgui.Name = "r0TouchGui"
 	touchgui.SafeAreaCompatibility = Enum.SafeAreaCompatibility.FullscreenExtension
@@ -274,6 +298,7 @@ function InputController.createtouchgui(playergui: PlayerGui)
 	touchgui.IgnoreGuiInset = false
 	touchgui.ResetOnSpawn = false
 
+	--- bottom-left thumbstick frame
 	local thumbstickframe = Instance.new("Frame")
 	thumbstickframe.Name = "ThumbstickFrame"
 	thumbstickframe.AnchorPoint = Vector2.zero
@@ -283,6 +308,7 @@ function InputController.createtouchgui(playergui: PlayerGui)
 	thumbstickframe.BackgroundTransparency = 1
 	thumbstickframe.Parent = touchgui
 
+	--- ring around circle
 	local ring = Instance.new("Frame")
 	ring.Name = "Ring"
 	ring.AnchorPoint = Vector2.one * 0.5
@@ -302,6 +328,7 @@ function InputController.createtouchgui(playergui: PlayerGui)
 	ringcorner.CornerRadius = UDim.new(1, 0)
 	ringcorner.Parent = ring
 
+	--- circle
 	local circle = Instance.new("Frame")
 	circle.Name = "Circle"
 	circle.AnchorPoint = Vector2.one * 0.5
@@ -326,7 +353,7 @@ function InputController.createtouchgui(playergui: PlayerGui)
 	return touchgui
 end
 
---- returns internally-resolved `UserInputService.PreferredInput` based on recency
+--- returns internally-resolved `UserInputService.PreferredInput` signal based on recency
 function InputController.preferredinputchanged()
 	return script:GetAttributeChangedSignal("PreferredInput")
 end
