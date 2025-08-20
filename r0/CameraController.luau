@@ -134,9 +134,9 @@ local CameraController = {
 	--- internally-set boolean describing whether camera is in first person
 	InFirstPerson = false;
 
-	--- Note: DotProduct check in CoordinateFrame::lookAt() prevents using values within about \
-	--- 8.11 degrees of the +/- Y axis, that's why these limits are currently 80 degrees \
-	--- 
+	--- "...Note: DotProduct check in CoordinateFrame::lookAt() prevents using values within about \
+	--- 8.11 degrees of the +/- Y axis, that's why these limits are currently 80 degrees" \
+	--- \
 	--- camera min pitch
 	CameraMinPitch = math.rad(-80);
 	--- camera max pitch
@@ -258,10 +258,10 @@ end
 
 --- changes internal currentzoomdistance and infirstperson values
 function CameraController.resolvecurrentzoomdistance(desiredsubjectdistance: number)
-	--- By default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0
+	--- "...by default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0
 	--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made
 	--- available by the developer without needing to allow players to mousewheel dolly into first person.
-	--- Some modules will override this function to remove or change first-person capability.
+	--- Some modules will override this function to remove or change first-person capability."
 	if CameraController.CameraMode == Enum.CameraMode.LockFirstPerson then
 		CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
 		if not CameraController.InFirstPerson then
@@ -300,8 +300,8 @@ function CameraController.resetinputs()
 	table.move(table.create(#CameraController.ZoomInputs, 0), 1, #CameraController.ZoomInputs, 1, CameraController.ZoomInputs)
 end
 
---- adjusts the touch sensitivity delta so that sensitivity is reduced when swiping up \
---- or down, but stays the same when swiping towards the middle of the screen
+--- "...adjusts the touch sensitivity delta so that sensitivity is reduced when swiping up \
+--- or down, but stays the same when swiping towards the middle of the screen"
 function CameraController.resolvetouchpitchsensitivity(delta: Vector2): Vector2
 	local camera = CameraController.Camera
 
