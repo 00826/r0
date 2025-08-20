@@ -524,9 +524,10 @@ if RunService:IsClient() then
 	UserInputService.InputChanged:Connect(inputchanged)
 	UserInputService.InputEnded:Connect(inputended)
 
-	--- update
+	--- camera step
 	RunService:BindToRenderStep("r0Camera", CameraController.RenderPriority, CameraController.step)
 
+	--- updates zoom distance and spring wrt min/maxzoomdistance
 	local function zoomdistancemodified()
 		local mindistance = CameraController.CameraMinZoomDistance
 		local maxdistance = CameraController.CameraMaxZoomDistance
@@ -542,6 +543,7 @@ if RunService:IsClient() then
 		Spring.step(s, 1/60)
 	end
 
+	--- min/max zoom distance change
 	LocalPlayer:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(function()
 		CameraController.CameraMinZoomDistance = LocalPlayer.CameraMinZoomDistance
 		zoomdistancemodified()
