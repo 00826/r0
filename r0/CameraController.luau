@@ -16,8 +16,26 @@ local Spring = require(script.Parent:WaitForChild("Spring"))
 ---
 --- camera controller
 local CameraController = {
-	--- camera
+	--- camera object: \
+	--- `CameraMode` and `CameraType` \
+	--- are read-from internally \
+	--- and written-to externally
 	Camera = workspace.CurrentCamera;
+
+	--- internal cameramode \
+	--- this overwrites `CameraController.Camera.CameraMode`
+	CameraMode = Enum.CameraMode.Classic;
+	--- internal lockfirstperson \
+	--- this overwrites `CameraController.Camera.CameraType` \
+	--- \
+	--- this should be either custom or scriptable \
+	--- as all other cameratypes behaviors are best handled externally
+	CameraType = Enum.CameraType.Custom;
+	
+	--- shiftlock value \
+	--- original value: `Vector3.new(1.75, 0, 0)`
+	CameraOffset = Vector3.zero;
+
 	--- initial camera angle
 	InitialCameraAngle = CFrame.fromOrientation(math.rad(-15), 0, 0);
 	--- reset camera angle on next step
@@ -139,7 +157,8 @@ function CameraController.step(dt: number)
 
 	local camera = CameraController.Camera
 
-	if camera.CameraType == Enum.CameraType.Scriptable then
+	--- early exit if scriptable
+	if CameraController.CameraType == Enum.CameraType.Scriptable then
 		CameraController.reset()
 		return
 	end
@@ -147,12 +166,13 @@ function CameraController.step(dt: number)
 	local cameracframe = camera.CFrame
 	local camerasubject = camera.CameraSubject
 
+	--- resolve camera subject cframe
 	local camerasubjectcframe = CFrame.identity
-	
 	if camerasubject and camerasubject:IsA("BasePart") then
 		camerasubjectcframe = camerasubject:GetPivot()
 	end
 
+	--- resolve camera reset angle
 	local cameralookvector = cameracframe.LookVector
 	if CameraController.ResetCameraAngle then
 		if camerasubject and camerasubject:IsA("BasePart") then
@@ -164,11 +184,11 @@ function CameraController.step(dt: number)
 		CameraController.ResetCameraAngle = false
 	end
 
-	local rotateinput = CameraController.getrotationinput(realtime)
-
+	--- resolve zoom
 	local zoominput = CameraController.getzoominput()
 	CameraController.stepzoom(zoominput)
 
+	--- resolve spring
 	local zoomspring = CameraController.ZoomSpring
 	zoomspring.goal = CameraController.CurrentZoomDistance
 
@@ -176,15 +196,28 @@ function CameraController.step(dt: number)
 	
 	local zoomdistance = Spring.step(zoomspring, realtime)
 
+	--- resolve rotations
+	local rotateinput = CameraController.getrotationinput(realtime)
 	local camerafocusposition = camerasubjectcframe.Position
 	local newlookvector = CameraController.rotatelookvector(cameralookvector, rotateinput)
 
+	--- resolve camera cframes
 	local realcframe = CFrame.lookAlong(camerafocusposition - (zoomdistance * newlookvector), newlookvector)
-	local realfocus = CFrame.lookAlong(camerasubjectcframe.Position, newlookvector)
+	local realfocus = CFrame.lookAlong(camerafocusposition, newlookvector)
+	
+	--- apply camera offset (shiftlock)
+	local cameraoffset = CameraController.CameraOffset
+	if cameraoffset ~= Vector3.zero then
+		local relativeoffset = cameraoffset.X * realcframe.RightVector + cameraoffset.Y * realcframe.UpVector + cameraoffset.Z * realcframe.LookVector
 
+		realcframe += relativeoffset
+	end
+
+	--- apply camera cframes
 	camera.CFrame = realcframe
 	camera.Focus = realfocus
 
+	--- reset delta-based inputs
 	CameraController.resetinputs()
 
 	CameraController.LastStep = now
@@ -229,7 +262,7 @@ function CameraController.resolvecurrentzoomdistance(desiredsubjectdistance: num
 	--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made
 	--- available by the developer without needing to allow players to mousewheel dolly into first person.
 	--- Some modules will override this function to remove or change first-person capability.
-	if LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
+	if CameraController.CameraMode == Enum.CameraMode.LockFirstPerson then
 		CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
 		if not CameraController.InFirstPerson then
 			CameraController.InFirstPerson = true
@@ -276,23 +309,32 @@ function CameraController.resolvetouchpitchsensitivity(delta: Vector2): Vector2
 		return delta
 	end
 	
-	-- get the camera pitch in world space
+	--- get the camera pitch in world space
 	local pitch = camera.CFrame:ToEulerAnglesYXZ()
 	
 	if delta.Y*pitch >= 0 then
-		-- do not reduce sensitivity when pitching towards the horizon
+		--- do not reduce sensitivity when pitching towards the horizon
 		return delta
 	end
 	
-	-- set up a line to fit:
-	-- 1 = f(0)
-	-- 0 = f(±pi/2)
+	--- set up a line to fit:
+	--- 1 = f(0)
+	--- 0 = f(±pi/2)
 	local curveY = 1 - (2*math.abs(pitch)/math.pi)^0.75
 
-	-- remap curveY from [0, 1] -> [MIN_TOUCH_SENSITIVITY_FRACTION, 1]
+	--- remap curveY from [0, 1] -> [MIN_TOUCH_SENSITIVITY_FRACTION, 1]
 	local sensitivity = math.map(curveY, 0, 1, CameraController.TouchSensitivityFraction, 1)
 
 	return Vector2.new(1, sensitivity)*delta
+end
+
+function CameraController.mapsignedvaluetodeadzone(value: number, deadzone: number)
+	local abs = math.abs(value)
+	if abs > deadzone then
+		return math.map(abs, deadzone, 1, 0, 1) * math.sign(value)
+	else
+		return 0
+	end
 end
 
 --- returns rotation input as a sum of all device inputs
@@ -306,7 +348,11 @@ function CameraController.getrotationinput(dt: number, disablekeyboardrotation: 
 	}]]
 	local paninputs = CameraController.PanInputs
 
-	local gamepadrotationvector = CameraController.GamepadSpeed * Vector2.new(paninputs[1], paninputs[2]) * UserGameSettings.GamepadCameraSensitivity
+	local gamepaddeadzone = CameraController.GamepadDeadzone
+	local gamepadx = CameraController.mapsignedvaluetodeadzone(paninputs[1], gamepaddeadzone)
+	local gamepady = CameraController.mapsignedvaluetodeadzone(paninputs[2], gamepaddeadzone)
+
+	local gamepadrotationvector = CameraController.GamepadSpeed * Vector2.new(gamepadx, gamepady) * UserGameSettings.GamepadCameraSensitivity
 	local keyboardrotationvector = CameraController.ArrowKeySpeed * Vector2.new(paninputs[3] + paninputs[4], 0) * dt
 	local mousemovevector = CameraController.MouseSpeed * Vector2.new(paninputs[5], paninputs[6])
 	local pointerpanvector = CameraController.PointerSpeed * Vector2.new(paninputs[7], paninputs[8])
