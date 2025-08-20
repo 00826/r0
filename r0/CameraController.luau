@@ -73,8 +73,8 @@ local CameraController = {
 	--- ZOOM_SPEED_TOUCH
 	TouchZoomSpeed = 0.04;
 
-	--- "...Adjust the touch sensitivity so that sensitivity is reduced when swiping up" \
-	--- 25% sensitivity at 90° \
+	--- "...Adjust the touch sensitivity so that sensitivity is reduced when swiping up \
+	--- 25% sensitivity at 90°" \
 	--- MIN_TOUCH_SENSITIVITY_FRACTION
 	TouchSensitivityFraction = 0.25;
 
@@ -82,22 +82,18 @@ local CameraController = {
 	GamepadDeadzone = 0.1;
 
 	--- pan inputs as a single table \
-	--- constructing a vector2 is expensive !!
-	--[[{
-		[1,  2] gamepad x, y
-		[3,  4] keyboard arrow l, r
-		[5,  6] mouse delta x, y
-		[7,  8] pointer pan delta x, y
-		[9, 10] touch pan delta x, y
-	}]]
+	--- constructing a vector2 is expensive !! \
+	--- `[1,  2]` gamepad x, y \
+	--- `[3,  4]` keyboard arrow l, r \
+	--- `[5,  6]` mouse delta x, y \
+	--- `[7,  8]` pointer pan delta x, y \
+	--- `[9, 10]` touch pan delta x, y
 	PanInputs = table.create(10, 0);
-	--[[{
-		[1] keyboard i
-		[2] keyboard o
-		[3] mouse wheel (pointeraction)
-		[4] mouse pinch (pointeraction)
-		[5] touch pinch
-	}]]
+	--- `[1]` keyboard i
+	--- `[2]` keyboard o
+	--- `[3]` mouse wheel (pointeraction)
+	--- `[4]` mouse pinch (pointeraction)
+	--- `[5]` touch pinch
 	ZoomInputs = table.create(5, 0);
 
 	--- `Enum.UserInputType -> is pan-held` readwrite table
@@ -258,9 +254,9 @@ end
 
 --- changes internal currentzoomdistance and infirstperson values
 function CameraController.resolvecurrentzoomdistance(desiredsubjectdistance: number)
-	--- "...by default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0
-	--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made
-	--- available by the developer without needing to allow players to mousewheel dolly into first person.
+	--- "...by default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0 \
+	--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made \
+	--- available by the developer without needing to allow players to mousewheel dolly into first person. \
 	--- Some modules will override this function to remove or change first-person capability."
 	if CameraController.CameraMode == Enum.CameraMode.LockFirstPerson then
 		CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
@@ -317,8 +313,8 @@ function CameraController.resolvetouchpitchsensitivity(delta: Vector2): Vector2
 		return delta
 	end
 	
-	--- set up a line to fit:
-	--- 1 = f(0)
+	--- set up a line to fit: \
+	--- 1 = f(0) \
 	--- 0 = f(±pi/2)
 	local curveY = 1 - (2*math.abs(pitch)/math.pi)^0.75
 
@@ -339,13 +335,11 @@ end
 
 --- returns rotation input as a sum of all device inputs
 function CameraController.getrotationinput(dt: number, disablekeyboardrotation: boolean?)
-	--[[{
-		[1,  2] gamepad x, y
-		[3,  4] keyboard arrow l, r
-		[5,  6] mouse delta x, y
-		[7,  8] pointer pan delta x, y
-		[9, 10] touch pan delta x, y
-	}]]
+	--- `[1,  2]` gamepad x, y \
+	--- `[3,  4]` keyboard arrow l, r \
+	--- `[5,  6]` mouse delta x, y \
+	--- `[7,  8]` pointer pan delta x, y \
+	--- `[9, 10]` touch pan delta x, y
 	local paninputs = CameraController.PanInputs
 
 	local gamepaddeadzone = CameraController.GamepadDeadzone
@@ -385,13 +379,12 @@ end
 
 if RunService:IsClient() then
 	--- internal functions
-	--[[{
-		[1,  2] gamepad x, y
-		[3,  4] keyboard arrow l, r
-		[5,  6] mouse delta x, y
-		[7,  8] pointer pan delta x, y
-		[9, 10] touch pan delta x, y
-	}]]
+
+	--- `[1,  2]` gamepad x, y \
+	--- `[3,  4]` keyboard arrow l, r \
+	--- `[5,  6]` mouse delta x, y \
+	--- `[7,  8]` pointer pan delta x, y \
+	--- `[9, 10]` touch pan delta x, y
 	local paninputs = CameraController.PanInputs
 
 	--- interally-called by contextaction "r0CameraThumbstick"
