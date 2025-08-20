@@ -34,7 +34,7 @@ local CameraController = {
 	
 	--- shiftlock value \
 	--- original value: `Vector3.new(1.75, 0, 0)`
-	CameraOffset = Vector3.zero;
+	CameraOffset = Vector3.new(0, 0, 0);
 
 	--- initial camera angle
 	InitialCameraAngle = CFrame.fromOrientation(math.rad(-15), 0, 0);
