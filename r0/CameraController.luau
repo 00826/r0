@@ -10,14 +10,7 @@ local GuiService = game:GetService("GuiService")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local UserInputService = game:GetService("UserInputService")
 
-local ZoomController = require(script.Parent:WaitForChild("ZoomController"))
-
--- Note: DotProduct check in CoordinateFrame::lookAt() prevents using values within about
--- 8.11 degrees of the +/- Y axis, that's why these limits are currently 80 degrees
-local MIN_Y = math.rad(-80)
-local MAX_Y = math.rad(80)
-
-local LastStep = 0
+local Spring = require(script.Parent:WaitForChild("Spring"))
 
 --- ### CameraController.luau
 ---
@@ -27,6 +20,7 @@ local CameraController = {
 	Camera = workspace.CurrentCamera;
 	--- initial camera angle
 	InitialCameraAngle = CFrame.fromOrientation(math.rad(-15), 0, 0);
+	--- reset camera angle on next step
 	ResetCameraAngle = true;
 
 	--- input priority
@@ -34,22 +28,22 @@ local CameraController = {
 	--- render priority
 	RenderPriority = Enum.RenderPriority.Camera.Value;
 
-	--- length of time for a short mouse button tap to be registered \
-	--- MB_TAP_LENGTH
-	PanMouseMinTime = 0.3;
-	--- arrow key camera pan speed \
+	--- arrow key camera pan speed in radians/sec \
 	--- ROTATION_SPEED_KEYS
-	ArrowKeyRadSec = math.rad(120);
-	--- gamepad pan speed \
+	ArrowKeySpeed = math.rad(120);
+	--- gamepad pan speed in radians/sec \
 	--- ROTATION_SPEED_GAMEPAD
-	GamepadRadSec = Vector2.new(1, 0.77) * math.rad(7);
+	GamepadSpeed = Vector2.new(1, 0.77) * math.rad(7);
 
+	--- mouse pan speed in radians/sec
 	--- ROTATION_SPEED_MOUSE
-	MouseRadSec = Vector2.new(1, 0.77)*math.rad(0.5);
+	MouseSpeed = Vector2.new(1, 0.77)*math.rad(0.5);
+	--- pointer pan speed in radians/sec
 	--- ROTATION_SPEED_POINTERACTION
-	PointerRadSec = Vector2.new(1, 0.77)*math.rad(7);
+	PointerSpeed = Vector2.new(1, 0.77)*math.rad(7);
+	--- touch pan speed in radians/sec
 	--- ROTATION_SPEED_TOUCH
-	TouchRadSec = Vector2.new(1, 0.66)*math.rad(1);
+	TouchSpeed = Vector2.new(1, 0.66)*math.rad(1);
 
 	--- (scaled studs/wheel click)
 	--- ZOOM_SPEED_MOUSE
@@ -69,18 +63,16 @@ local CameraController = {
 	--- gamepad pan deadzone
 	GamepadDeadzone = 0.1;
 
-	--- gamepad vector
-	GamepadVector = table.create(2, 0);
-	--- keyboard pan left/right
-	KeyboardPan = table.create(2, 0);
-	--- mouse delta
-	MouseMove = table.create(2, 0);
-	--- pointer pan
-	PointerPan = table.create(2, 0);
-	--- touch move
-	TouchPan = table.create(2, 0);
-	--- touch pinch
-
+	--- pan inputs as a single table \
+	--- constructing a vector2 is expensive !!
+	--[[{
+		[1,  2] gamepad x, y
+		[3,  4] keyboard arrow l, r
+		[5,  6] mouse delta x, y
+		[7,  8] pointer pan delta x, y
+		[9, 10] touch pan delta x, y
+	}]]
+	PanInputs = table.create(10, 0);
 	--[[{
 		[1] keyboard i
 		[2] keyboard o
@@ -96,13 +88,26 @@ local CameraController = {
 		[Enum.UserInputType.Touch] = false;
 	};
 
+	--- boolean describing whether a pan input is being held
 	HoldPan = false;
+
+	--- internally-written time elapsed since last step
+	LastStep = 0;
 
 	--- default distance away from subject
 	DefaultZoomDistance = 12.5;
 	--- current zoom distance from subject
-	CurrentZoomDistance = math.clamp(12.5, LocalPlayer.CameraMinZoomDistance, LocalPlayer.CameraMaxZoomDistance);
+	CurrentZoomDistance = 0;
 
+	--- zoom spring frequency
+	ZoomSpringFrequency = 4.5;
+	--- zoom spring acceleration
+	ZoomSpringAcceleration = 0.0375;
+
+	--- internal camera spring
+	ZoomSpring = Spring.create(0, 0, 0, 0);
+
+	--- zoom sensitivity curve
 	ZoomSensitivityCurve = 0.5;
 	--- min zoom when in first person
 	FirstPersonDistanceMinZoom = 0.5;
@@ -111,15 +116,34 @@ local CameraController = {
 	--- internally-set boolean describing whether camera is in first person
 	InFirstPerson = false;
 
-	CameraMinZoomDistance = LocalPlayer.CameraMinZoomDistance;
-	CameraMaxZoomDistance = LocalPlayer.CameraMaxZoomDistance;
+	--- Note: DotProduct check in CoordinateFrame::lookAt() prevents using values within about \
+	--- 8.11 degrees of the +/- Y axis, that's why these limits are currently 80 degrees \
+	--- 
+	--- camera min pitch
+	CameraMinPitch = math.rad(-80);
+	--- camera max pitch
+	CameraMaxPitch = math.rad(80);
+
+	--- camera min zoom distance \
+	--- written to @ lowermost block
+	CameraMinZoomDistance = 0;
+	--- camera max zoom distance \
+	--- written to @ lowermost block
+	CameraMaxZoomDistance = 0;
 }
 
+--- advances cameracontroller by `dt`
 function CameraController.step(dt: number)
 	local now = os.clock()
-	local realtime = now - LastStep
+	local realtime = now - CameraController.LastStep
 
 	local camera = CameraController.Camera
+
+	if camera.CameraType == Enum.CameraType.Scriptable then
+		CameraController.reset()
+		return
+	end
+
 	local cameracframe = camera.CFrame
 	local camerasubject = camera.CameraSubject
 
@@ -142,31 +166,42 @@ function CameraController.step(dt: number)
 
 	local rotateinput = CameraController.getrotationinput(realtime)
 
-	CameraController.stepzoom()
+	local zoominput = CameraController.getzoominput()
+	CameraController.stepzoom(zoominput)
+
+	local zoomspring = CameraController.ZoomSpring
+	zoomspring.goal = CameraController.CurrentZoomDistance
+
+	--- poppercam here to set maxvalue
+	
+	local zoomdistance = Spring.step(zoomspring, realtime)
 
 	local camerafocusposition = camerasubjectcframe.Position
-	local newlookvector = CameraController.calculatenewlookvectorfromarg(cameralookvector, rotateinput)
+	local newlookvector = CameraController.rotatelookvector(cameralookvector, rotateinput)
 
-	camera.CFrame = CFrame.lookAlong(camerafocusposition - (CameraController.CurrentZoomDistance * newlookvector), newlookvector)
-	camera.Focus = CFrame.new(camerasubjectcframe.Position)
+	local realcframe = CFrame.lookAlong(camerafocusposition - (zoomdistance * newlookvector), newlookvector)
+	local realfocus = CFrame.lookAlong(camerasubjectcframe.Position, newlookvector)
+
+	camera.CFrame = realcframe
+	camera.Focus = realfocus
 
 	CameraController.resetinputs()
 
-	LastStep = now
+	CameraController.LastStep = now
 end
 
-function CameraController.stepzoom()
+--- advances internal currentzoomdistance by zoominput
+function CameraController.stepzoom(zoominput: number)
 	local zoom = CameraController.CurrentZoomDistance
-	local zoomdelta = CameraController.getzoomdelta()
 
-	if math.abs(zoomdelta) > 0 then
+	if math.abs(zoominput) > 0 then
 		local newzoom
 
-		if zoomdelta > 0 then
-			newzoom = zoom + zoomdelta*(1 + zoom*CameraController.ZoomSensitivityCurve)
+		if zoominput > 0 then
+			newzoom = zoom + zoominput*(1 + zoom*CameraController.ZoomSensitivityCurve)
 			newzoom = math.max(newzoom, CameraController.FirstPersonDistanceSnap)
 		else
-			newzoom = (zoom + zoomdelta)/(1 - zoomdelta*CameraController.ZoomSensitivityCurve)
+			newzoom = (zoom + zoominput)/(1 - zoominput*CameraController.ZoomSensitivityCurve)
 			newzoom = math.max(newzoom, CameraController.FirstPersonDistanceMinZoom)
 		end
 
@@ -174,81 +209,68 @@ function CameraController.stepzoom()
 			newzoom = CameraController.FirstPersonDistanceMinZoom
 		end
 
-		CameraController.setcameratosubjectdistance(newzoom)
+		CameraController.resolvecurrentzoomdistance(newzoom)
 	end
-
-	return ZoomController.GetZoomRadius()
 end
 
-function CameraController.calculatenewlookvectorfromarg(lookvector: Vector3, rotateinput: Vector2)
+--- returns lookvector rotated by input rotation
+function CameraController.rotatelookvector(lookvector: Vector3, rotation: Vector2)
 	local pitchangle = math.asin(lookvector.Y)
-	local ry = math.clamp(rotateinput.Y, -MAX_Y + pitchangle, -MIN_Y + pitchangle)
-	local constrainedrotateinput = Vector2.new(rotateinput.X, ry)
+	local ry = math.clamp(rotation.Y, -CameraController.CameraMaxPitch + pitchangle, -CameraController.CameraMinPitch + pitchangle)
+	local constrainedrotateinput = Vector2.new(rotation.X, ry)
 	local cframe = CFrame.Angles(0, -constrainedrotateinput.X, 0) * CFrame.lookAlong(Vector3.zero, lookvector) * CFrame.Angles(-constrainedrotateinput.Y, 0, 0)
 
 	return cframe.LookVector
 end
 
-function CameraController.setcameratosubjectdistance(desiredsubjectdistance: number)
-	local lastsubjectdistance = CameraController.CurrentZoomDistance
-
-	-- By default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0
-	-- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made
-	-- available by the developer without needing to allow players to mousewheel dolly into first person.
-	-- Some modules will override this function to remove or change first-person capability.
+--- changes internal currentzoomdistance and infirstperson values
+function CameraController.resolvecurrentzoomdistance(desiredsubjectdistance: number)
+	--- By default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0
+	--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made
+	--- available by the developer without needing to allow players to mousewheel dolly into first person.
+	--- Some modules will override this function to remove or change first-person capability.
 	if LocalPlayer.CameraMode == Enum.CameraMode.LockFirstPerson then
 		CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
 		if not CameraController.InFirstPerson then
 			CameraController.InFirstPerson = true
 		end
 	else
-		local newSubjectDistance = math.clamp(desiredsubjectdistance, LocalPlayer.CameraMinZoomDistance, LocalPlayer.CameraMaxZoomDistance)
-		if newSubjectDistance < CameraController.FirstPersonDistanceSnap then
+		local clampedsubjectdistance = math.clamp(desiredsubjectdistance, CameraController.CameraMinZoomDistance, CameraController.CameraMaxZoomDistance)
+		if clampedsubjectdistance < CameraController.FirstPersonDistanceSnap then
 			CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
 			if not CameraController.InFirstPerson then
 				CameraController.InFirstPerson = true
 			end
 		else
-			CameraController.CurrentZoomDistance = newSubjectDistance
+			CameraController.CurrentZoomDistance = clampedsubjectdistance
 			if CameraController.InFirstPerson then
 				CameraController.InFirstPerson = false
 			end
 		end
 	end
 
-	-- Pass target distance and zoom direction to the zoom controller
-	ZoomController.SetZoomParameters(CameraController.CurrentZoomDistance, math.sign(desiredsubjectdistance - lastsubjectdistance))
-
-	-- Returned only for convenience to the caller to know the outcome
 	return CameraController.CurrentZoomDistance
 end
 
-function CameraController.refreshzoomdistance(value: number?)
-	CameraController.CurrentZoomDistance = math.clamp(value or CameraController.CurrentZoomDistance, LocalPlayer.CameraMinZoomDistance, LocalPlayer.CameraMaxZoomDistance);
-end
-
+--- resets all camera inputs
 function CameraController.reset()
-	table.move(table.create(#CameraController.GamepadVector, 0), 1, #CameraController.GamepadVector, 1, CameraController.GamepadVector)
-	table.move(table.create(#CameraController.KeyboardPan, 0), 1, #CameraController.KeyboardPan, 1, CameraController.KeyboardPan)
-	table.move(table.create(#CameraController.MouseMove, 0), 1, #CameraController.MouseMove, 1, CameraController.MouseMove)
-	table.move(table.create(#CameraController.PointerPan, 0), 1, #CameraController.PointerPan, 1, CameraController.PointerPan)
-	table.move(table.create(#CameraController.TouchPan, 0), 1, #CameraController.TouchPan, 1, CameraController.TouchPan)
-
+	table.move(table.create(#CameraController.PanInputs, 0), 1, #CameraController.PanInputs, 1, CameraController.PanInputs)
 	table.move(table.create(#CameraController.ZoomInputs, 0), 1, #CameraController.ZoomInputs, 1, CameraController.ZoomInputs)
 end
 
+--- resets delta-based inputs \
+--- interally-called at the end of cameracontroller step
 function CameraController.resetinputs()
-	table.move(table.create(#CameraController.MouseMove, 0), 1, #CameraController.MouseMove, 1, CameraController.MouseMove)
-	table.move(table.create(#CameraController.PointerPan, 0), 1, #CameraController.PointerPan, 1, CameraController.PointerPan)
-	table.move(table.create(#CameraController.TouchPan, 0), 1, #CameraController.TouchPan, 1, CameraController.TouchPan)
-	
+	--- preserve non-delta inputs, stored in first 4 (gamepad pan, keyboard pan)
+	local len = #CameraController.PanInputs - 4
+	table.move(table.create(len, 0), 1, len, 5, CameraController.PanInputs)
 	table.move(table.create(#CameraController.ZoomInputs, 0), 1, #CameraController.ZoomInputs, 1, CameraController.ZoomInputs)
 end
 
--- Adjust the touch sensitivity so that sensitivity is reduced when swiping up
--- or down, but stays the same when swiping towards the middle of the screen
-function CameraController.adjusttouchpitchsensitivity(delta: Vector2): Vector2
-	local camera = workspace.CurrentCamera
+--- adjusts the touch sensitivity delta so that sensitivity is reduced when swiping up \
+--- or down, but stays the same when swiping towards the middle of the screen
+function CameraController.resolvetouchpitchsensitivity(delta: Vector2): Vector2
+	local camera = CameraController.Camera
 
 	if not camera then
 		return delta
@@ -268,34 +290,45 @@ function CameraController.adjusttouchpitchsensitivity(delta: Vector2): Vector2
 	local curveY = 1 - (2*math.abs(pitch)/math.pi)^0.75
 
 	-- remap curveY from [0, 1] -> [MIN_TOUCH_SENSITIVITY_FRACTION, 1]
-	-- local sensitivity = curveY*(1 - CameraController.TouchSensitivityFraction) + CameraController.TouchSensitivityFraction
 	local sensitivity = math.map(curveY, 0, 1, CameraController.TouchSensitivityFraction, 1)
 
 	return Vector2.new(1, sensitivity)*delta
 end
 
+--- returns rotation input as a sum of all device inputs
 function CameraController.getrotationinput(dt: number, disablekeyboardrotation: boolean?)
-	local keyboardrotationvector = CameraController.ArrowKeyRadSec * dt * Vector2.new(CameraController.KeyboardPan[1], CameraController.KeyboardPan[2])
-	local gamepadrotationvector = CameraController.GamepadRadSec * Vector2.new(CameraController.GamepadVector[1], CameraController.GamepadVector[2]) * UserGameSettings.GamepadCameraSensitivity
-	local mousemovevector = CameraController.MouseRadSec * Vector2.new(CameraController.MouseMove[1], CameraController.MouseMove[2])
-	local pointerpanvector = CameraController.PointerRadSec * Vector2.new(CameraController.PointerPan[1], CameraController.PointerPan[2])
-	local touchpanvector = CameraController.TouchRadSec * CameraController.adjusttouchpitchsensitivity(Vector2.new(CameraController.TouchPan[1], CameraController.TouchPan[2]))
+	--[[{
+		[1,  2] gamepad x, y
+		[3,  4] keyboard arrow l, r
+		[5,  6] mouse delta x, y
+		[7,  8] pointer pan delta x, y
+		[9, 10] touch pan delta x, y
+	}]]
+	local paninputs = CameraController.PanInputs
+
+	local gamepadrotationvector = CameraController.GamepadSpeed * Vector2.new(paninputs[1], paninputs[2]) * UserGameSettings.GamepadCameraSensitivity
+	local keyboardrotationvector = CameraController.ArrowKeySpeed * Vector2.new(paninputs[3] + paninputs[4], 0) * dt
+	local mousemovevector = CameraController.MouseSpeed * Vector2.new(paninputs[5], paninputs[6])
+	local pointerpanvector = CameraController.PointerSpeed * Vector2.new(paninputs[7], paninputs[8])
+	local touchpanvector = CameraController.TouchSpeed * CameraController.resolvetouchpitchsensitivity(Vector2.new(paninputs[9], paninputs[10]))
+
+	local camerayinvertvector = Vector2.new(1, UserGameSettings:GetCameraYInvertValue())
 
 	if disablekeyboardrotation then
 		keyboardrotationvector *= Vector2.zero
 	end
 
-	return Vector2.new(1, UserGameSettings:GetCameraYInvertValue())
-		* (
-			keyboardrotationvector
-			+ gamepadrotationvector
-			+ mousemovevector
-			+ pointerpanvector
-			+ touchpanvector
-		)
+	return (
+		keyboardrotationvector
+		+ gamepadrotationvector
+		+ mousemovevector
+		+ pointerpanvector
+		+ touchpanvector
+	) * camerayinvertvector
 end
 
-function CameraController.getzoomdelta()
+--- returns zoom input as a sum of all device inputs
+function CameraController.getzoominput()
 	local zoom = CameraController.ZoomInputs
 	local keyboardzoom = CameraController.KeyZoomSpeed * (zoom[1] + zoom[2])
 	local mousezoom = CameraController.MouseZoomSpeed * (-zoom[3] + zoom[4])
@@ -304,90 +337,129 @@ function CameraController.getzoomdelta()
 	return keyboardzoom + mousezoom + touchzoom
 end
 
-function CameraController.thumbstick(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
-	if inputobject.KeyCode == Enum.KeyCode.Thumbstick2 then
-		local position = inputobject.Position
-		local gamepadvector = CameraController.GamepadVector
-		gamepadvector[1] = position.X
-		gamepadvector[2] = -position.Y
-	end
-
-	return Enum.ContextActionResult.Pass
-end
-
-function CameraController.mousemovement(inputobject: InputObject)
-	local delta = inputobject.Delta
-	CameraController.MouseMove[1] = delta.X
-	CameraController.MouseMove[2] = delta.Y
-end
-
-function CameraController.keypress(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
-	local keycode = inputobject.KeyCode
-	local value = state == Enum.UserInputState.Begin and 1 or 0
-	if keycode == Enum.KeyCode.I then
-		CameraController.ZoomInputs[1] = value
-	elseif keycode == Enum.KeyCode.O then
-		CameraController.ZoomInputs[2] = value
-	elseif keycode == Enum.KeyCode.Left then
-		CameraController.KeyboardPan[1] = value
-	elseif keycode == Enum.KeyCode.Right then
-		CameraController.KeyboardPan[2] = value
-	end
-
-	return
-end
-
-function CameraController.pointeraction(wheel: number, pan: Vector2, pinch: number, sunkinput: boolean)
-	if sunkinput then return end
-
-	CameraController.ZoomInputs[3] = wheel
-	CameraController.ZoomInputs[4] = -pinch
-	CameraController.TouchPan[1] = pan.X
-	CameraController.TouchPan[2] = pan.Y
-end
-
-function CameraController.touchpan(touchpositions: {Vector2}, totaltranslation: Vector2, velocity: Vector2, state: Enum.UserInputState, sunkinput: boolean)
-	if #touchpositions == 1 then
-		CameraController.TouchPan[1] += velocity.X
-		CameraController.TouchPan[2] += velocity.Y
-
-		CameraController.PanInputMap[Enum.UserInputType.Touch] = true
-	else
-		CameraController.PanInputMap[Enum.UserInputType.Touch] = false
-	end
-end
-
-function CameraController.touchpinch(touchpositions: {Vector2}, scale: number, velocity: number, state: Enum.UserInputState, sunkinput: boolean)
-	if #touchpositions == 2 then
-		CameraController.ZoomInputs[5] = scale
-	end
-end
-
-function CameraController.inputbegan(inputobject: InputObject, sunkinput: boolean)
-	if inputobject.UserInputType == Enum.UserInputType.MouseButton2 and not sunkinput then
-		CameraController.PanInputMap[Enum.UserInputType.MouseButton2] = true
-		CameraController.HoldPan = true
-	end
-end
-
-function CameraController.inputchanged(inputobject: InputObject, sunkinput: boolean)
-	if inputobject.UserInputType == Enum.UserInputType.MouseMovement then
-		CameraController.mousemovement(inputobject)
-	end
-end
-
-function CameraController.inputended(inputobject: InputObject, sunkinput: boolean)
-	if inputobject.UserInputType == Enum.UserInputType.MouseButton2 then
-		CameraController.PanInputMap[Enum.UserInputType.MouseButton2] = false
-		CameraController.HoldPan = false
-	end
-end
-
 if RunService:IsClient() then
+	--- internal functions
+	--[[{
+		[1,  2] gamepad x, y
+		[3,  4] keyboard arrow l, r
+		[5,  6] mouse delta x, y
+		[7,  8] pointer pan delta x, y
+		[9, 10] touch pan delta x, y
+	}]]
+	local paninputs = CameraController.PanInputs
+
+	--- interally-called by contextaction "r0CameraThumbstick"
+	local function thumbstick(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+		if inputobject.KeyCode == Enum.KeyCode.Thumbstick2 then
+			local position = inputobject.Position
+			
+			paninputs[1] = position.X
+			paninputs[2] = -position.Y
+		end
+
+		return Enum.ContextActionResult.Pass
+	end
+
+	--- interally-called by userinputservice.inputbegan
+	local function mousemovement(inputobject: InputObject)
+		local delta = inputobject.Delta
+		paninputs[5] = delta.X
+		paninputs[6] = delta.Y
+	end
+
+	--- interally-called by contextaction "r0CameraKeypress"
+	local function keypress(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+		local keycode = inputobject.KeyCode
+		local value = state == Enum.UserInputState.Begin and 1 or 0
+		if keycode == Enum.KeyCode.I then
+			CameraController.ZoomInputs[1] = value
+		elseif keycode == Enum.KeyCode.O then
+			CameraController.ZoomInputs[2] = value
+		elseif keycode == Enum.KeyCode.Left then
+			paninputs[3] = value
+		elseif keycode == Enum.KeyCode.Right then
+			paninputs[4] = -value
+		end
+
+		return
+	end
+
+	--- interally-called by userinputservice.pointeraction
+	local function pointeraction(wheel: number, pan: Vector2, pinch: number, sunkinput: boolean)
+		if sunkinput then return end
+
+		CameraController.ZoomInputs[3] = wheel
+		CameraController.ZoomInputs[4] = -pinch
+		paninputs[7] = pan.X
+		paninputs[8] = pan.Y
+	end
+
+	--- interally-called by userinputservice.touchpan
+	local function touchpan(touchpositions: {Vector2}, totaltranslation: Vector2, velocity: Vector2, state: Enum.UserInputState, sunkinput: boolean)
+		if #touchpositions == 1 then
+			paninputs[9] += velocity.X
+			paninputs[10] += velocity.Y
+
+			CameraController.PanInputMap[Enum.UserInputType.Touch] = true
+		else
+			CameraController.PanInputMap[Enum.UserInputType.Touch] = false
+		end
+	end
+
+	--- interally-called by userinputservice.touchpinch
+	local function touchpinch(touchpositions: {Vector2}, scale: number, velocity: number, state: Enum.UserInputState, sunkinput: boolean)
+		if #touchpositions == 2 then
+			CameraController.ZoomInputs[5] = scale
+		end
+	end
+
+	--- interally-called by userinputservice.inputbegan
+	local function inputbegan(inputobject: InputObject, sunkinput: boolean)
+		if inputobject.UserInputType == Enum.UserInputType.MouseButton2 and not sunkinput then
+			CameraController.PanInputMap[Enum.UserInputType.MouseButton2] = true
+			CameraController.HoldPan = true
+		end
+	end
+
+	--- interally-called by userinputservice.inputchanged
+	local function inputchanged(inputobject: InputObject, sunkinput: boolean)
+		if inputobject.UserInputType == Enum.UserInputType.MouseMovement then
+			mousemovement(inputobject)
+		end
+	end
+
+	--- interally-called by userinputservice.inputended
+	local function inputended(inputobject: InputObject, sunkinput: boolean)
+		if inputobject.UserInputType == Enum.UserInputType.MouseButton2 then
+			CameraController.PanInputMap[Enum.UserInputType.MouseButton2] = false
+			CameraController.HoldPan = false
+		end
+	end
+
+	do
+		--- write player zoom to camera zoom
+		CameraController.CameraMinZoomDistance = LocalPlayer.CameraMinZoomDistance
+		CameraController.CameraMaxZoomDistance = LocalPlayer.CameraMaxZoomDistance
+
+		--- write defaults to distance
+		local mindistance = CameraController.CameraMinZoomDistance
+		local maxdistance = CameraController.CameraMaxZoomDistance
+		local defaultzoomdistance = math.clamp(CameraController.DefaultZoomDistance, mindistance, maxdistance)
+		CameraController.CurrentZoomDistance = defaultzoomdistance
+
+		--- write defaults to spring
+		local s = CameraController.ZoomSpring
+		s.distance = defaultzoomdistance
+		s.frequency = CameraController.ZoomSpringFrequency
+		s.goal = defaultzoomdistance
+		s.mindistance = mindistance
+		s.maxdistance = maxdistance
+	end
+
 	--- thumbstick
 	ContextActionService:BindActionAtPriority(
 		"r0CameraThumbstick",
-		CameraController.thumbstick,
+		thumbstick,
 		false,
 		CameraController.InputPriority,
 		Enum.KeyCode.Thumbstick2
@@ -395,7 +467,7 @@ if RunService:IsClient() then
 	--- keyboard
 	ContextActionService:BindActionAtPriority(
 		"r0CameraKeypress",
-		CameraController.keypress,
+		keypress,
 		false,
 		CameraController.InputPriority,
 		Enum.KeyCode.Left,
@@ -404,25 +476,40 @@ if RunService:IsClient() then
 		Enum.KeyCode.O
 	)
 	--- pointer
-	UserInputService.PointerAction:Connect(CameraController.pointeraction)
+	UserInputService.PointerAction:Connect(pointeraction)
 	--- touch pan, pinch
-	UserInputService.TouchPan:Connect(CameraController.touchpan)
-	UserInputService.TouchPinch:Connect(CameraController.touchpinch)
+	UserInputService.TouchPan:Connect(touchpan)
+	UserInputService.TouchPinch:Connect(touchpinch)
 	--- mouse/inputbeganchangedended
-	UserInputService.InputBegan:Connect(CameraController.inputbegan)
-	UserInputService.InputChanged:Connect(CameraController.inputchanged)
-	UserInputService.InputEnded:Connect(CameraController.inputended)
+	UserInputService.InputBegan:Connect(inputbegan)
+	UserInputService.InputChanged:Connect(inputchanged)
+	UserInputService.InputEnded:Connect(inputended)
 
 	--- update
 	RunService:BindToRenderStep("r0Camera", CameraController.RenderPriority, CameraController.step)
 
+	local function zoomdistancemodified()
+		local mindistance = CameraController.CameraMinZoomDistance
+		local maxdistance = CameraController.CameraMaxZoomDistance
+		local currentzoomdistance = math.clamp(CameraController.CurrentZoomDistance, mindistance, maxdistance)
+		
+		CameraController.CurrentZoomDistance = currentzoomdistance
+
+		local s = CameraController.ZoomSpring
+		s.distance = currentzoomdistance
+		s.mindistance = mindistance
+		s.maxdistance = maxdistance
+
+		Spring.step(s, 1/60)
+	end
+
 	LocalPlayer:GetPropertyChangedSignal("CameraMinZoomDistance"):Connect(function()
 		CameraController.CameraMinZoomDistance = LocalPlayer.CameraMinZoomDistance
-		CameraController.refreshzoomdistance()
+		zoomdistancemodified()
 	end)
 	LocalPlayer:GetPropertyChangedSignal("CameraMaxZoomDistance"):Connect(function()
 		CameraController.CameraMaxZoomDistance = LocalPlayer.CameraMaxZoomDistance
-		CameraController.refreshzoomdistance()
+		zoomdistancemodified()
 	end)
 end
 
