@@ -161,7 +161,7 @@ function InputController.rebind(preferredinput: Enum.PreferredInput)
 end
 
 --- internally-bound by `InputController.rebind(Enum.PreferredInput.KeyboardAndMouse)`
-function InputController.keyboard(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+function InputController.keyboard(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
 	local entry = InputController.KeyboardMap[inputobject.KeyCode]
 	if not entry then return end
 
@@ -172,9 +172,9 @@ function InputController.keyboard(action: string, inputstate: Enum.UserInputStat
 		[4] = right
 	}]]
 	local keysigns = InputController.KeyboardSigns
-	keysigns[entry.Offset] = (inputstate == Enum.UserInputState.Begin) and entry.Sign or 0
+	keysigns[entry.Offset] = (state == Enum.UserInputState.Begin) and entry.Sign or 0
 
-	if inputstate == Enum.UserInputState.Cancel then
+	if state == Enum.UserInputState.Cancel then
 		InputController.Vector = Vector3.zero
 	else
 		InputController.Vector = Vector3.new(keysigns[3] + keysigns[4], 0, keysigns[1] + keysigns[2])
@@ -184,8 +184,8 @@ function InputController.keyboard(action: string, inputstate: Enum.UserInputStat
 end
 
 --- internally-bound by `InputController.rebind(Enum.PreferredInput.Gamepad)`
-function InputController.gamepad(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
-	if inputstate == Enum.UserInputState.Cancel then
+function InputController.gamepad(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+	if state == Enum.UserInputState.Cancel then
 		InputController.Vector = Vector3.zero
 		return Enum.ContextActionResult.Sink
 	end
@@ -205,7 +205,7 @@ function InputController.gamepad(action: string, inputstate: Enum.UserInputState
 end
 
 --- internally-bound by `InputController.rebind(Enum.PreferredInput.Touch)`
-function InputController.touch(action: string, inputstate: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
+function InputController.touch(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
 	local touchgui = InputController.TouchGui
 	if not touchgui then return end
 
@@ -219,7 +219,7 @@ function InputController.touch(action: string, inputstate: Enum.UserInputState, 
 	local ring = (thumbstickframe::any).Ring::Frame
 	local circle = (thumbstickframe::any).Circle::Frame
 
-	if inputstate == Enum.UserInputState.Begin then
+	if state == Enum.UserInputState.Begin then
 		if InputController.TouchObject then
 			return Enum.ContextActionResult.Pass
 		end
@@ -236,7 +236,7 @@ function InputController.touch(action: string, inputstate: Enum.UserInputState, 
 		else
 			return Enum.ContextActionResult.Pass
 		end
-	elseif inputstate == Enum.UserInputState.Change then
+	elseif state == Enum.UserInputState.Change then
 		if InputController.TouchObject == inputobject then
 			InputController.TouchCurrentPosition = inputposition
 
@@ -265,7 +265,7 @@ function InputController.touch(action: string, inputstate: Enum.UserInputState, 
 		end
 
 		return Enum.ContextActionResult.Pass
-	elseif inputstate == Enum.UserInputState.End then
+	elseif state == Enum.UserInputState.End then
 		if InputController.TouchObject == inputobject then
 			InputController.TouchObject = nil
 			InputController.Vector = Vector3.zero
@@ -277,7 +277,7 @@ function InputController.touch(action: string, inputstate: Enum.UserInputState, 
 		end
 
 		return Enum.ContextActionResult.Pass
-	elseif inputstate == Enum.UserInputState.Cancel then
+	elseif state == Enum.UserInputState.Cancel then
 		InputController.TouchObject = nil
 		InputController.Vector = Vector3.zero
 
