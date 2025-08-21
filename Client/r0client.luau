@@ -18,10 +18,6 @@ local InputController = r0.InputController
 
 assert(CameraController and InputController, "this script should be a localscript")
 
---[[local PlayerScripts = LocalPlayer:WaitForChild("PlayerScripts")
-local PlayerModule = PlayerScripts:WaitForChild("PlayerModule")
-local ControlModule = require(PlayerModule:WaitForChild("ControlModule"))::any]]
-
 local Camera = workspace.CurrentCamera
 
 r0.Container = workspace:WaitForChild("Entities")
