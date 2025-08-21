@@ -214,8 +214,11 @@ function CameraController.step(dt: number)
 	local realcframe = CFrame.lookAlong(camerafocusposition - (zoomdistance * newlookvector), newlookvector)
 	local realfocus = CFrame.lookAlong(camerafocusposition, newlookvector)
 	
-	--- apply camera offset (shiftlock)
+	--- apply camera offset (shiftlock) if not first person
 	local cameraoffset = CameraController.CameraOffset
+	if CameraController.CurrentZoomDistance <= CameraController.FirstPersonDistanceMinZoom then
+		cameraoffset = Vector3.zero
+	end
 	if cameraoffset ~= Vector3.zero then
 		local relativeoffset = cameraoffset.X * realcframe.RightVector + cameraoffset.Y * realcframe.UpVector + cameraoffset.Z * realcframe.LookVector
 

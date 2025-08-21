@@ -104,21 +104,6 @@ local function inputbegan(inputobject: InputObject, sunkinput: boolean)
 	if table.find(shiftlockkeys, inputobject.KeyCode) then
 		shiftlockstate = not shiftlockstate
 
-		if shiftlockstate == true then
-			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
-			if InputController.PreferredInput == Enum.PreferredInput.Gamepad then
-				CameraController.CameraOffset = Vector3.zero
-			else
-				CameraController.CameraOffset = Vector3.new(1.75, 0, 0)
-			end
-			r0input.RotationType = Enum.RotationType.CameraRelative
-			UserInputService.MouseIcon = "rbxasset://textures/MouseLockedCursor.png"
-		else
-			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			CameraController.CameraOffset = Vector3.zero
-			r0input.RotationType = Enum.RotationType.MovementRelative
-			UserInputService.MouseIcon = ""
-		end
 		return
 	end
 end
@@ -164,6 +149,27 @@ local function step(dt: number)
 
 	local character = LocalPlayer.Character
 	if not character then return end
+
+	if shiftlockstate == true then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		if InputController.PreferredInput == Enum.PreferredInput.Gamepad then
+			CameraController.CameraOffset = Vector3.zero
+		else
+			CameraController.CameraOffset = Vector3.new(1.75, 0, 0)
+		end
+		r0input.RotationType = Enum.RotationType.CameraRelative
+		UserInputService.MouseIcon = "rbxasset://textures/MouseLockedCursor.png"
+	elseif CameraController.CurrentZoomDistance <= CameraController.FirstPersonDistanceMinZoom then
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		CameraController.CameraOffset = Vector3.zero
+		r0input.RotationType = Enum.RotationType.CameraRelative
+		UserInputService.MouseIcon = ""
+	else
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		CameraController.CameraOffset = Vector3.zero
+		r0input.RotationType = Enum.RotationType.MovementRelative
+		UserInputService.MouseIcon = ""
+	end
 	
 	r0.step(character, dt)
 	r0.pack(r0output.CFrame, r0output.Locomotion, r0input.Vertical, r0.Replication.Local)
