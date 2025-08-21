@@ -69,6 +69,13 @@ local keycodesigns = {
 	[Enum.KeyCode.ButtonL3] = -1;
 }
 
+local shiftlockstate = false
+local shiftlockkeys = {
+	Enum.KeyCode.LeftShift;
+	Enum.KeyCode.RightShift;
+	Enum.KeyCode.ButtonY;
+}
+
 local lastjump = 0
 local flywindow = 2/8
 
@@ -77,12 +84,6 @@ local function flight(state: boolean?)
 		state = not r0input.Flying
 	end
 	r0input.Flying = state::boolean
-
-	if r0input.Flying then
-		r0input.RotationType = Enum.RotationType.MovementRelative
-	else
-		r0input.RotationType = Enum.RotationType.MovementRelative
-	end
 end
 
 local function inputbegan(inputobject: InputObject, sunkinput: boolean)
@@ -101,6 +102,28 @@ local function inputbegan(inputobject: InputObject, sunkinput: boolean)
 
 			lastjump = now
 		end
+		return
+	end
+
+	if table.find(shiftlockkeys, inputobject.KeyCode) then
+		shiftlockstate = not shiftlockstate
+
+		if shiftlockstate == true then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			if InputController.PreferredInput == Enum.PreferredInput.Gamepad then
+				CameraController.CameraOffset = Vector3.zero
+			else
+				CameraController.CameraOffset = Vector3.new(1.75, 0, 0)
+			end
+			r0input.RotationType = Enum.RotationType.CameraRelative
+			UserInputService.MouseIcon = "rbxasset://textures/MouseLockedCursor.png"
+		else
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			CameraController.CameraOffset = Vector3.zero
+			r0input.RotationType = Enum.RotationType.MovementRelative
+			UserInputService.MouseIcon = ""
+		end
+		return
 	end
 end
 
@@ -149,7 +172,7 @@ local function step(dt: number)
 	r0.step(character, dt)
 	r0.pack(r0output.CFrame, r0output.Locomotion, r0input.Vertical, r0.Replication.Local)
 	
-	if r0output.Floor ~= nil then
+	if r0input.Flying == true and r0output.Floor ~= nil then
 		flight(false)
 	end
 

@@ -6,7 +6,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local ContextActionService = game:GetService("ContextActionService")
-local GuiService = game:GetService("GuiService")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local UserInputService = game:GetService("UserInputService")
 
@@ -221,6 +220,7 @@ function CameraController.step(dt: number)
 		local relativeoffset = cameraoffset.X * realcframe.RightVector + cameraoffset.Y * realcframe.UpVector + cameraoffset.Z * realcframe.LookVector
 
 		realcframe += relativeoffset
+		realfocus += relativeoffset
 	end
 
 	--- resolve zoom limit
