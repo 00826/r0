@@ -10,7 +10,9 @@ local GuiService = game:GetService("GuiService")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local UserInputService = game:GetService("UserInputService")
 
+local Limiter = require(script.Parent:WaitForChild("Limiter"))
 local Spring = require(script.Parent:WaitForChild("Spring"))
+local TransformExtrapolator = require(script.Parent:WaitForChild("TransformExtrapolator"))
 
 --- ### CameraController.luau
 ---
@@ -35,6 +37,18 @@ local CameraController = {
 	--- shiftlock value \
 	--- original value: `Vector3.new(1.75, 0, 0)`
 	CameraOffset = Vector3.new(0, 0, 0);
+
+	--- camera distance limiter
+	Limiter = require(script.Parent:WaitForChild("Limiter"));
+	--- camera distance limiter extrapolator
+	Extrapolator = TransformExtrapolator.create();
+	--- camera distance limiter focus rotation
+	FocusRotation = CFrame.new(
+		0, 0, 0,
+		-1, 0, 0,
+		0, 1, 0,
+		0, 0, -1
+	);
 
 	--- initial camera angle
 	InitialCameraAngle = CFrame.fromOrientation(math.rad(-15), 0, 0);
@@ -209,6 +223,32 @@ function CameraController.step(dt: number)
 		realcframe += relativeoffset
 	end
 
+	--- resolve zoom limit
+	local limitedcframe do
+		local limitedzoom = CameraController.CameraMaxZoomDistance
+
+		local minpossiblezoom = CameraController.FirstPersonDistanceMinZoom
+		local maxpossiblezoom = math.max(CameraController.CameraMaxZoomDistance, zoomdistance)
+
+		if zoomspring.goal > 1 then
+			local extrapolator = CameraController.Extrapolator
+			local rotatedfocus = CFrame.lookAlong(realfocus.Position, -realcframe.LookVector) * CameraController.FocusRotation
+
+			local extrapolationresult = TransformExtrapolator.step(extrapolator, realtime, rotatedfocus)
+			limitedzoom = Limiter.cast(realfocus * CFrame.new(0, 0, minpossiblezoom), maxpossiblezoom - minpossiblezoom, extrapolationresult) + minpossiblezoom
+			
+			limitedcframe = rotatedfocus * CFrame.new(0, 0, limitedzoom)
+		end
+
+		zoomspring.mindistance = minpossiblezoom
+		zoomspring.maxdistance = math.min(CameraController.CameraMaxZoomDistance, limitedzoom)
+
+		limitedcframe = realcframe
+	end
+
+	--- finalize camera cframe
+	realcframe = limitedcframe
+
 	--- apply camera cframes
 	camera.CFrame = realcframe
 	camera.Focus = realfocus
@@ -238,8 +278,33 @@ function CameraController.stepzoom(zoominput: number)
 			newzoom = CameraController.FirstPersonDistanceMinZoom
 		end
 
-		CameraController.resolvecurrentzoomdistance(newzoom)
+		--- CameraController.resolvecurrentzoomdistance(newzoom) \
+		--- "...by default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0 \
+		--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made \
+		--- available by the developer without needing to allow players to mousewheel dolly into first person. \
+		--- Some modules will override this function to remove or change first-person capability."
+		if CameraController.CameraMode == Enum.CameraMode.LockFirstPerson then
+			CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
+			if not CameraController.InFirstPerson then
+				CameraController.InFirstPerson = true
+			end
+		else
+			local clampedsubjectdistance = math.clamp(newzoom, CameraController.CameraMinZoomDistance, CameraController.CameraMaxZoomDistance)
+			if clampedsubjectdistance < CameraController.FirstPersonDistanceSnap then
+				CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
+				if not CameraController.InFirstPerson then
+					CameraController.InFirstPerson = true
+				end
+			else
+				CameraController.CurrentZoomDistance = clampedsubjectdistance
+				if CameraController.InFirstPerson then
+					CameraController.InFirstPerson = false
+				end
+			end
+		end
 	end
+
+	return CameraController.CurrentZoomDistance
 end
 
 --- returns lookvector rotated by input rotation
@@ -250,35 +315,6 @@ function CameraController.rotatelookvector(lookvector: Vector3, rotation: Vector
 	local cframe = CFrame.Angles(0, -constrainedrotateinput.X, 0) * CFrame.lookAlong(Vector3.zero, lookvector) * CFrame.Angles(-constrainedrotateinput.Y, 0, 0)
 
 	return cframe.LookVector
-end
-
---- changes internal currentzoomdistance and infirstperson values
-function CameraController.resolvecurrentzoomdistance(desiredsubjectdistance: number)
-	--- "...by default, camera modules will respect LockFirstPerson and override the CurrentZoomDistance with 0 \
-	--- regardless of what Player.CameraMinZoomDistance is set to, so that first person can be made \
-	--- available by the developer without needing to allow players to mousewheel dolly into first person. \
-	--- Some modules will override this function to remove or change first-person capability."
-	if CameraController.CameraMode == Enum.CameraMode.LockFirstPerson then
-		CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
-		if not CameraController.InFirstPerson then
-			CameraController.InFirstPerson = true
-		end
-	else
-		local clampedsubjectdistance = math.clamp(desiredsubjectdistance, CameraController.CameraMinZoomDistance, CameraController.CameraMaxZoomDistance)
-		if clampedsubjectdistance < CameraController.FirstPersonDistanceSnap then
-			CameraController.CurrentZoomDistance = CameraController.FirstPersonDistanceMinZoom
-			if not CameraController.InFirstPerson then
-				CameraController.InFirstPerson = true
-			end
-		else
-			CameraController.CurrentZoomDistance = clampedsubjectdistance
-			if CameraController.InFirstPerson then
-				CameraController.InFirstPerson = false
-			end
-		end
-	end
-
-	return CameraController.CurrentZoomDistance
 end
 
 --- resets all camera inputs
