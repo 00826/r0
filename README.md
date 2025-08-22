@@ -52,7 +52,7 @@ because of this some annotations are on the more verbose side hopefully for bett
 ...are parts of a minimal rewrite of roblox's `PlayerModule`
 
 [r0/CameraController.luau](r0/CameraController.luau) controls the camera based on inputs read from [r0/InputController.luau](r0/InputController.luau) \
-[r0/Limiter.luau](r0/Limiter.luau) is the equivalent of the playermodule poppercam and limits the zoom spring wrt its raycast blacklistparams \
+[r0/Limiter.luau](r0/Limiter.luau) is the equivalent of the playermodule poppercam and queries the camera viewport in order to artificially limit camera zoom distance \
 [r0/Spring.luau](r0/Spring.luau) is a de-ooped spring module found in the playermodule camerautils \
 [r0/TransformExtrapolator.luau](r0/TransformExtrapolator.luau) is a de-ooped cframe extrapolator found in the playermodule poppercam
 
