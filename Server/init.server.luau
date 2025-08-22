@@ -7,7 +7,6 @@ workspace:SetAttribute("initserver", (function()
 	for _, module in ipairs{
 		script:WaitForChild("CollisionGroups");
 		script:WaitForChild("r0server");
-		script:WaitForChild("_closer");
 	} do
 		local s, e = pcall(require, module)
 		if not s then warn(`initserver error [{module.Name}]: {e}`) end
