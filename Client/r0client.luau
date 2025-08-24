@@ -136,9 +136,13 @@ local function step(dt: number)
 	r0input.CameraCFrame = Camera.CFrame
 
 	if r0input.Vertical == -1 then
-		r0input.FrictionModifier = 1/24
+		r0input.FrictionModifier = 1/16
 	else
-		r0input.FrictionModifier = 1
+		if r0output.Floor then
+			r0input.FrictionModifier = 1
+		else
+			r0input.FrictionModifier = 1/2
+		end
 	end
 
 	if r0input.Flying then
@@ -257,7 +261,8 @@ local function replicate(dt: number)
 				end
 			end
 		else
-			print("erm... guysh?", userid)
+			--- attempt to replicate non-player character
+			--- out of scope for this test case
 			continue
 		end
 	end
