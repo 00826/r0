@@ -109,6 +109,10 @@ local CameraController = {
 	--- `[5]` touch pinch
 	ZoomInputs = table.create(5, 0);
 
+	GamepadZoomKeyCode = Enum.KeyCode.ButtonR3;
+	GamepadZoomSteps = 3;
+	CurrentGamepadZoomStep = 2;
+
 	--- `Enum.UserInputType -> is pan-held` readwrite table
 	PanInputMap = {
 		[Enum.UserInputType.MouseButton2] = false;
@@ -260,6 +264,17 @@ function CameraController.step(dt: number)
 	CameraController.resetinputs()
 
 	CameraController.LastStep = now
+end
+
+function CameraController.gamepadzoomstep(delta: number)
+	local maxsteps = CameraController.GamepadZoomSteps
+	local currentstep = (CameraController.CurrentGamepadZoomStep + delta) % maxsteps
+	if currentstep < 1 then
+		currentstep = maxsteps
+	end
+
+	CameraController.CurrentGamepadZoomStep = currentstep
+	CameraController.CurrentZoomDistance = math.map(currentstep, 1, maxsteps, CameraController.CameraMinZoomDistance, CameraController.CameraMaxZoomDistance)
 end
 
 --- advances internal currentzoomdistance by zoominput
@@ -496,6 +511,9 @@ if RunService:IsClient() then
 		if inputobject.UserInputType == Enum.UserInputType.MouseButton2 and not sunkinput then
 			CameraController.PanInputMap[Enum.UserInputType.MouseButton2] = true
 			CameraController.HoldPan = true
+		end
+		if inputobject.KeyCode == CameraController.GamepadZoomKeyCode and not sunkinput then
+			CameraController.gamepadzoomstep(1)
 		end
 	end
 

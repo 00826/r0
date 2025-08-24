@@ -411,6 +411,20 @@ if RunService:IsClient() then
 		end)
 		if not s then warn(e) end
 	end
+	do --- reset inputs on changes
+		UserInputService.TextBoxFocused:Connect(function()
+			InputController.Vector = Vector3.zero
+		end)
+		UserInputService.TextBoxFocusReleased:Connect(function()
+			InputController.Vector = Vector3.zero
+		end)
+		UserInputService.WindowFocusReleased:Connect(function()
+			InputController.Vector = Vector3.zero
+		end)
+		GuiService.MenuOpened:Connect(function()
+			InputController.Vector = Vector3.zero
+		end)
+	end
 end
 
 return InputController
