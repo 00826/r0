@@ -183,6 +183,14 @@ function InputController.keyboard(action: string, state: Enum.UserInputState, in
 	return Enum.ContextActionResult.Pass
 end
 
+--- zeroes-out input vector and keyboard inputs 
+function InputController.reset()
+	InputController.Vector = Vector3.zero
+
+	local len = #InputController.KeyboardSigns
+	table.move(table.create(len, 0), 1, len, 1, InputController.KeyboardSigns)
+end
+
 --- internally-bound by `InputController.rebind(Enum.PreferredInput.Gamepad)`
 function InputController.gamepad(action: string, state: Enum.UserInputState, inputobject: InputObject): Enum.ContextActionResult?
 	if state == Enum.UserInputState.Cancel then
@@ -412,18 +420,10 @@ if RunService:IsClient() then
 		if not s then warn(e) end
 	end
 	do --- reset inputs on changes
-		UserInputService.TextBoxFocused:Connect(function()
-			InputController.Vector = Vector3.zero
-		end)
-		UserInputService.TextBoxFocusReleased:Connect(function()
-			InputController.Vector = Vector3.zero
-		end)
-		UserInputService.WindowFocusReleased:Connect(function()
-			InputController.Vector = Vector3.zero
-		end)
-		GuiService.MenuOpened:Connect(function()
-			InputController.Vector = Vector3.zero
-		end)
+		UserInputService.TextBoxFocused:Connect(InputController.reset)
+		UserInputService.TextBoxFocusReleased:Connect(InputController.reset)
+		UserInputService.WindowFocusReleased:Connect(InputController.reset)
+		GuiService.MenuOpened:Connect(InputController.reset)
 	end
 end
 
