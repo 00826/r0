@@ -338,16 +338,18 @@ end
 --- resets all camera inputs
 function CameraController.reset()
 	table.move(table.create(#CameraController.PanInputs, 0), 1, #CameraController.PanInputs, 1, CameraController.PanInputs)
-	table.move(table.create(#CameraController.ZoomInputs, 0), 1, #CameraController.ZoomInputs, 1, CameraController.ZoomInputs)
+	local zlen = #CameraController.ZoomInputs - 2
+	table.move(table.create(zlen, 0), 1, zlen, 3, CameraController.ZoomInputs)
 end
 
 --- resets delta-based inputs \
 --- interally-called at the end of cameracontroller step
 function CameraController.resetinputs()
 	--- preserve non-delta inputs, stored in first 4 (gamepad pan, keyboard pan)
-	local len = #CameraController.PanInputs - 4
-	table.move(table.create(len, 0), 1, len, 5, CameraController.PanInputs)
-	table.move(table.create(#CameraController.ZoomInputs, 0), 1, #CameraController.ZoomInputs, 1, CameraController.ZoomInputs)
+	local plen = #CameraController.PanInputs - 4
+	table.move(table.create(plen, 0), 1, plen, 5, CameraController.PanInputs)
+	local zlen = #CameraController.ZoomInputs - 2
+	table.move(table.create(zlen, 0), 1, zlen, 3, CameraController.ZoomInputs)
 end
 
 --- "...adjusts the touch sensitivity delta so that sensitivity is reduced when swiping up \
@@ -492,13 +494,13 @@ if RunService:IsClient() then
 		local keycode = inputobject.KeyCode
 		local value = state == Enum.UserInputState.Begin and 1 or 0
 		if keycode == Enum.KeyCode.I then
-			CameraController.ZoomInputs[1] = value
+			CameraController.ZoomInputs[1] = -value
 		elseif keycode == Enum.KeyCode.O then
 			CameraController.ZoomInputs[2] = value
 		elseif keycode == Enum.KeyCode.Left then
-			paninputs[3] = value
+			paninputs[3] = -value
 		elseif keycode == Enum.KeyCode.Right then
-			paninputs[4] = -value
+			paninputs[4] = value
 		end
 
 		return
