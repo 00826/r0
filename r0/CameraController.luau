@@ -404,7 +404,7 @@ function CameraController.getrotationinput(dt: number, disablekeyboardrotation: 
 	local keyboardrotationvector = CameraController.ArrowKeySpeed * Vector2.new(paninputs[3] + paninputs[4], 0) * dt
 	local mousemovevector = CameraController.MouseSpeed * Vector2.new(paninputs[5], paninputs[6])
 	local pointerpanvector = CameraController.PointerSpeed * Vector2.new(paninputs[7], paninputs[8])
-	local touchpanvector = CameraController.TouchSpeed * CameraController.resolvetouchpitchsensitivity(Vector2.new(paninputs[9], paninputs[10]))
+	local touchpanvector = CameraController.TouchSpeed * Vector2.new(paninputs[9], paninputs[10]) --- CameraController.resolvetouchpitchsensitivity(Vector2.new(paninputs[9], paninputs[10]))
 
 	local camerayinvertvector = Vector2.new(1, UserGameSettings:GetCameraYInvertValue())
 
@@ -429,6 +429,33 @@ function CameraController.getzoominput()
 	local touchzoom = CameraController.TouchZoomSpeed * (-zoom[5])
 
 	return keyboardzoom + mousezoom + touchzoom
+end
+
+function CameraController.touchguithumbstickframe(): Frame?
+	local playergui = LocalPlayer:FindFirstChildOfClass("PlayerGui")::PlayerGui?
+	local touchgui = playergui and playergui:FindFirstChild("r0TouchGui")::ScreenGui?
+	local thumbstickframe = touchgui and touchgui:FindFirstChild("ThumbstickFrame")::Frame?
+
+	return thumbstickframe
+end
+
+function CameraController.ispointinbounds(point: Vector2, topleft: Vector2, bottomright: Vector2)
+	local cx, cy = point.X, point.Y
+
+	return 
+		cx >= topleft.X and
+		cy >= topleft.Y and
+		cx <= bottomright.X and
+		cy <= bottomright.Y
+end
+
+function CameraController.filterpoints(array: {Vector2}, topleft, bottomright)
+	for i = #array, 1, -1 do
+		local vec = array[i]
+		if CameraController.ispointinbounds(vec, topleft, bottomright) then
+			table.remove(array, i)
+		end
+	end
 end
 
 if RunService:IsClient() then
@@ -487,20 +514,59 @@ if RunService:IsClient() then
 		paninputs[8] = pan.Y
 	end
 
+	local lasttranslation = Vector2.zero
+
+	local function resettouchpan()
+		lasttranslation = Vector2.zero
+		CameraController.PanInputs[9] = 0
+		CameraController.PanInputs[10] = 0
+	end
+
 	--- interally-called by userinputservice.touchpan
+	local ispanvalid = false
 	local function touchpan(touchpositions: {Vector2}, totaltranslation: Vector2, velocity: Vector2, state: Enum.UserInputState, sunkinput: boolean)
-		if #touchpositions == 1 then
-			paninputs[9] += velocity.X
-			paninputs[10] += velocity.Y
+		if state ~= Enum.UserInputState.Change then
+			if state == Enum.UserInputState.Begin then
+				--- pan is only valid if initial touch was not within bounds of the touchgui thumbstick
+				local thumbstickframe = CameraController.touchguithumbstickframe()
+				if thumbstickframe then
+					local apos, asize = thumbstickframe.AbsolutePosition, thumbstickframe.AbsoluteSize
+					CameraController.filterpoints(touchpositions, apos, apos + asize)
+				end
+
+				ispanvalid = #touchpositions > 0
+			else
+				ispanvalid = false
+			end
+
+			resettouchpan()
+
+			return
+		end
+
+		if #touchpositions == 1 and ispanvalid then
+			local delta = totaltranslation - lasttranslation
+			lasttranslation = totaltranslation
+			paninputs[9] += delta.X
+			paninputs[10] += delta.Y
 
 			CameraController.PanInputMap[Enum.UserInputType.Touch] = true
 		else
+			resettouchpan()
 			CameraController.PanInputMap[Enum.UserInputType.Touch] = false
 		end
 	end
 
 	--- interally-called by userinputservice.touchpinch
 	local function touchpinch(touchpositions: {Vector2}, scale: number, velocity: number, state: Enum.UserInputState, sunkinput: boolean)
+		if state ~= Enum.UserInputState.Change then return end
+
+		local thumbstickframe = CameraController.touchguithumbstickframe()
+		if thumbstickframe then
+			local apos, asize = thumbstickframe.AbsolutePosition, thumbstickframe.AbsoluteSize
+			CameraController.filterpoints(touchpositions, apos, apos + asize)
+		end
+
 		if #touchpositions == 2 then
 			CameraController.ZoomInputs[5] = scale
 		end
@@ -529,6 +595,8 @@ if RunService:IsClient() then
 		if inputobject.UserInputType == Enum.UserInputType.MouseButton2 then
 			CameraController.PanInputMap[Enum.UserInputType.MouseButton2] = false
 			CameraController.HoldPan = false
+		elseif inputobject.UserInputType == Enum.UserInputType.Touch then
+			resettouchpan()
 		end
 	end
 
