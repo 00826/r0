@@ -404,7 +404,7 @@ function CameraController.getrotationinput(dt: number, disablekeyboardrotation: 
 	local keyboardrotationvector = CameraController.ArrowKeySpeed * Vector2.new(paninputs[3] + paninputs[4], 0) * dt
 	local mousemovevector = CameraController.MouseSpeed * Vector2.new(paninputs[5], paninputs[6])
 	local pointerpanvector = CameraController.PointerSpeed * Vector2.new(paninputs[7], paninputs[8])
-	local touchpanvector = CameraController.TouchSpeed * Vector2.new(paninputs[9], paninputs[10]) --- CameraController.resolvetouchpitchsensitivity(Vector2.new(paninputs[9], paninputs[10]))
+	local touchpanvector = CameraController.TouchSpeed * CameraController.resolvetouchpitchsensitivity(Vector2.new(paninputs[9], paninputs[10]))
 
 	local camerayinvertvector = Vector2.new(1, UserGameSettings:GetCameraYInvertValue())
 
@@ -518,8 +518,8 @@ if RunService:IsClient() then
 
 	local function resettouchpan()
 		lasttranslation = Vector2.zero
-		CameraController.PanInputs[9] = 0
-		CameraController.PanInputs[10] = 0
+		paninputs[9] = 0
+		paninputs[10] = 0
 	end
 
 	--- interally-called by userinputservice.touchpan
