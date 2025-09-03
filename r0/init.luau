@@ -1,4 +1,5 @@
 --!strict
+--!native
 
 local RunService = game:GetService("RunService")
 local IsServer = RunService:IsServer()
@@ -7,19 +8,24 @@ local Players = game:GetService("Players")
 
 local Remote = script:WaitForChild("Remote")
 
---- returns movevector from input vector `i` relative to `cframe`
-@native
-local function movevector(i: Vector3, cframe: CFrame)
+--- returns unit vector from input vector `i`, relative to viewport `lookvector, -upvector`
+local function movevector(i: Vector3, lookvector: Vector3, upvector: Vector3)
+	local rightvector = (vector.cross(lookvector::any, upvector::any)::any)::Vector3
 	local cos, sin
-	local _, _, _, R00, R01, R02, _, _, R12, _, _, R22 = cframe:GetComponents()
+
+	--[[
+	local R00, R01, R02 = rightvector.X, upvector.X, lookvector.X
+	local   _,   _, R12 = rightvector.Y, upvector.Y, lookvector.Y
+	local   _,   _, R22 = rightvector.Z, upvector.Z, lookvector.Z]]
+
+	local R12 = lookvector.Y
+
 	if R12 < 1 and R12 > -1 then
-		--- cos, sin = lookvector.x, lookvector.z
-		cos = R22
-		sin = R02
+		cos = lookvector.Z
+		sin = lookvector.X
 	else
-		--- cos, sin = rightvector.x, upvector.x
-		cos = R00
-		sin = -R01*math.sign(R12)
+		cos = rightvector.X
+		sin = -upvector.X*math.sign(lookvector.Y)
 	end
 
 	local length = (cos*cos + sin*sin)^0.5
@@ -27,7 +33,6 @@ local function movevector(i: Vector3, cframe: CFrame)
 end
 
 --- returns xyz movevector from input vector `i` and vertical input `v` relative to `cframe`
-@native
 function movevectorxyz(i: Vector3, v: number, cframe: CFrame)
 	local vec = cframe.Rotation:VectorToWorldSpace(i) + (Vector3.yAxis * v)
 	if vec == Vector3.zero then
@@ -38,7 +43,6 @@ function movevectorxyz(i: Vector3, v: number, cframe: CFrame)
 end
 
 --- returns `v.Unit`, or, if `NaN`, `Vector3.zero`
-@native
 local function unit_or_zero(v: Vector3)
 	if v.Magnitude > 0 then
 		return v.Unit
@@ -48,20 +52,17 @@ local function unit_or_zero(v: Vector3)
 end
 
 --- returns `v` projected onto `w`
-@native
 local function project(v: Vector3, w: Vector3)
 	w = unit_or_zero(w)
 	return v:Dot(w) * w
 end
 
 --- returns `v` rejected from `w`
-@native
 local function reject(v: Vector3, w: Vector3)
 	return v - project(v, w)
 end
 
 --- writes signed 24-bit integer to buffer
-@native
 local function writei24(b: buffer, offset: number, value: number)
 	local bitoffset = offset * 8
 	local sign = math.sign(value) < 0 and 1 or 0
@@ -74,7 +75,6 @@ local function writei24(b: buffer, offset: number, value: number)
 end
 
 --- reads signed 24-bit integer from buffer
-@native
 local function readi24(b: buffer, offset: number)
 	local bitoffset = offset * 8
 	local value = buffer.readbits(b, bitoffset, 23)
@@ -196,7 +196,6 @@ function r0.create()
 end
 
 --- re-signs an unsigned number read from 2 bits
-@native
 function r0.resign(unsigned: number)
 	if unsigned > 1 then
 		return -1
@@ -206,7 +205,6 @@ function r0.resign(unsigned: number)
 end
 
 --- un-signs an signed number to write into 2 bits
-@native
 function r0.unsign(signed: number)
 	local sign = math.sign(signed)
 	if sign < 0 then
@@ -339,10 +337,11 @@ function r0.step(character: Character, dt: number)
 	
 	--- true input vector
 	local truevector = Vector3.zero
+	local cameracframe = input.CameraCFrame
 	if isflying then
-		truevector = movevectorxyz(input.InputVector, input.Vertical, input.CameraCFrame)
+		truevector = movevectorxyz(input.InputVector, input.Vertical, cameracframe)
 	else
-		truevector = movevector(input.InputVector, input.CameraCFrame)
+		truevector = movevector(input.InputVector, -cameracframe.LookVector, cameracframe.UpVector)
 	end
 	local len = vector.magnitude(truevector::any)::any
 	local ismoving = len > 0
@@ -369,7 +368,7 @@ function r0.step(character: Character, dt: number)
 		rx, ry = cf:ToOrientation()
 	else
 		if input.RotationType == Enum.RotationType.CameraRelative then
-			rx, ry = input.CameraCFrame:ToOrientation()
+			rx, ry = cameracframe:ToOrientation()
 		elseif input.RotationType == Enum.RotationType.MovementRelative then
 			rx, ry = cframe:ToOrientation()
 		end
@@ -546,7 +545,6 @@ else
 		end
 	end)
 
-	@native
 	local function resync(bigbuffer: buffer)
 		local len = buffer.len(bigbuffer)
 		for i = 1, len, resyncoffset do
