@@ -105,7 +105,10 @@ local r0 = {
 		--- `ControlScript:GetMoveVector()`
 		InputVector = Vector3.zero;
 		--- signed number
-		Vertical = 0;
+		--- binary integer [0|1] describing upward input (jump)
+		InputUp = 0;
+		--- binary integer [0|1] describing downward input (slide)
+		InputDown = 0;
 
 		--- empty camera cframe
 		CameraCFrame = CFrame.identity;
@@ -195,25 +198,6 @@ function r0.create()
 	return character
 end
 
---- re-signs an unsigned number read from 2 bits
-function r0.resign(unsigned: number)
-	if unsigned > 1 then
-		return -1
-	end
-
-	return unsigned
-end
-
---- un-signs an signed number to write into 2 bits
-function r0.unsign(signed: number)
-	local sign = math.sign(signed)
-	if sign < 0 then
-		return 2
-	end
-
-	return sign
-end
-
 --- returns interpolation breakpoint wrt distance
 function r0.interpolationbreakpoint(distance: number)
 	for i, b in ipairs(r0.Interpolation.Breakpoints) do
@@ -247,7 +231,7 @@ function r0.applybreakpoints(b: { {Distance: number, Interpolate: boolean, Cycle
 end
 
 --- packs cframe, locomotion state, and signed vertical input into 12-wide replication
-function r0.pack(cframe: CFrame, locomotionstate: number, vertical: number, r: buffer?)
+function r0.pack(cframe: CFrame, locomotionstate: number, inputup: number, inputdown: number, r: buffer?)
 	if not r then
 		r = buffer.create(12)
 	end
@@ -264,12 +248,13 @@ function r0.pack(cframe: CFrame, locomotionstate: number, vertical: number, r: b
 
 	local bitoffset = 11 * 8
 	buffer.writebits(r, bitoffset + 0, 6, locomotionstate)
-	buffer.writebits(r, bitoffset + 6, 2, r0.unsign(vertical))
+	buffer.writebits(r, bitoffset + 6, 1, inputup)
+	buffer.writebits(r, bitoffset + 7, 1, inputdown)
 
 	return r
 end
 
---- unpacks cframe, locomotion state, and signed vertical input from 12-wide replication
+--- unpacks cframe, locomotion state, and vertical inputs from 12-wide replication
 function r0.unpack(r: buffer)
 	local position = Vector3.new(
 		readi24(r, 0),
@@ -282,9 +267,24 @@ function r0.unpack(r: buffer)
 	
 	local bitoffset = 11 * 8
 	local locomotionstate = buffer.readbits(r, bitoffset + 0, 6)
-	local vertical = r0.resign(buffer.readbits(r, bitoffset + 6, 2))
+	local inputup = buffer.readbits(r, bitoffset + 6, 1)
+	local inputdown = buffer.readbits(r, bitoffset + 7, 1)
 
-	return CFrame.new(position) * CFrame.fromOrientation(rx, ry, 0), locomotionstate, vertical
+	return CFrame.new(position) * CFrame.fromOrientation(rx, ry, 0), locomotionstate, inputup, inputdown
+end
+
+--- unpacks cframe from 12-wide replication
+function r0.unpackcframe(r: buffer)
+	local position = Vector3.new(
+		readi24(r, 0),
+		readi24(r, 3),
+		readi24(r, 6)
+	) / r0.Replication.ReadWritePrecision
+
+	local rx = math.map(buffer.readu8(r, 9), 0, 255, -math.pi, math.pi)
+	local ry = math.map(buffer.readu8(r, 10), 0, 255, -math.pi, math.pi)
+
+	return CFrame.new(position) * CFrame.fromOrientation(rx, ry, 0)
 end
 
 --- returns floor of character
@@ -324,9 +324,10 @@ function r0.step(character: Character, dt: number)
 	local floor = r0.floorcast(character, (sphere.Size.X * 0.5) + input.RadiusExtend, input.FloorcastExtend)
 
 	local isflying = input.Flying
+	local vertical = input.InputUp - input.InputDown
 
 	--- jump
-	if input.Vertical == 1 then
+	if input.InputUp == 1 then
 		local lv = rootpart.AssemblyLinearVelocity
 		if floor then
 			rootpart.AssemblyLinearVelocity = Vector3.new(lv.X, input.JumpPower * input.JumpModifier, lv.Z)
@@ -339,7 +340,7 @@ function r0.step(character: Character, dt: number)
 	local truevector = Vector3.zero
 	local cameracframe = input.CameraCFrame
 	if isflying then
-		truevector = movevectorxyz(input.InputVector, input.Vertical, cameracframe)
+		truevector = movevectorxyz(input.InputVector, vertical, cameracframe)
 	else
 		truevector = movevector(input.InputVector, -cameracframe.LookVector, cameracframe.UpVector)
 	end
@@ -429,7 +430,7 @@ function r0.step(character: Character, dt: number)
 	output.Locomotion = locomotion or 0
 end
 
-local replicationlen = buffer.len(r0.pack(CFrame.identity, 0, 0))
+local replicationlen = buffer.len(r0.pack(CFrame.identity, 0, 0, 0))
 local idoffset = replicationlen + 0
 local resyncoffset = replicationlen + 8
 

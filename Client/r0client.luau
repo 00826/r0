@@ -57,12 +57,12 @@ do --- interpolation settings
 	})
 end
 
-local keycodesigns = {
-	[Enum.KeyCode.Space] = 1;
-	[Enum.KeyCode.ButtonA] = 1;
-	[Enum.KeyCode.LeftControl] = -1;
-	[Enum.KeyCode.RightControl] = -1;
-	[Enum.KeyCode.ButtonL3] = -1;
+local updowninputs = {
+	[Enum.KeyCode.Space] = "InputUp";
+	[Enum.KeyCode.ButtonA] = "InputUp";
+	[Enum.KeyCode.LeftControl] = "InputDown";
+	[Enum.KeyCode.RightControl] = "InputDown";
+	[Enum.KeyCode.ButtonL3] = "InputDown";
 }
 
 local shiftlockstate = false
@@ -85,11 +85,11 @@ end
 local function inputbegan(inputobject: InputObject, sunkinput: boolean)
 	if sunkinput then return end
 
-	local sign = keycodesigns[inputobject.KeyCode]
-	if sign then
-		r0input.Vertical = sign
+	local inputkey = updowninputs[inputobject.KeyCode]
+	if inputkey then
+		r0input[inputkey] = 1
 
-		if sign == 1 then
+		if inputkey == "InputUp" then
 			local now = os.clock()
 			if now - lastjump < flywindow then
 				lastjump = 0
@@ -98,7 +98,6 @@ local function inputbegan(inputobject: InputObject, sunkinput: boolean)
 
 			lastjump = now
 		end
-		return
 	end
 
 	if table.find(shiftlockkeys, inputobject.KeyCode) then
@@ -113,9 +112,9 @@ UserInputService.InputBegan:Connect(inputbegan)
 local function inputended(inputobject: InputObject, sunkinput: boolean)
 	--- if sunkinput then return end
 
-	local sign = keycodesigns[inputobject.KeyCode]
-	if sign and r0input.Vertical == sign then
-		r0input.Vertical = 0
+	local inputkey = updowninputs[inputobject.KeyCode]
+	if inputkey then
+		r0input[inputkey] = 0
 	end
 end
 
@@ -135,7 +134,7 @@ local function step(dt: number)
 	r0input.InputVector = InputController.Vector
 	r0input.CameraCFrame = Camera.CFrame
 
-	if r0input.Vertical == -1 then
+	if r0input.InputDown == 1 then
 		r0input.FrictionModifier = 1/16
 	else
 		if r0output.Floor then
@@ -176,7 +175,7 @@ local function step(dt: number)
 	end
 	
 	r0.step(character, dt)
-	r0.pack(r0output.CFrame, r0output.Locomotion, r0input.Vertical, r0.Replication.Local)
+	r0.pack(r0output.CFrame, r0output.Locomotion, r0input.InputUp, r0input.InputDown, r0.Replication.Local)
 	
 	if r0input.Flying == true and r0output.Floor ~= nil then
 		flight(false)
@@ -242,7 +241,7 @@ local function replicate(dt: number)
 			if islocal then --- if not islocal but keeping this notation for readability
 				continue
 			else
-				local cframe, locomotionstate, vertical = r0.unpack(replication)
+				local cframe = r0.unpackcframe(replication)
 				local distancefromfocus = vector.magnitude(cframe.Position::any - replicationfocus::any)
 				local breakpoint = r0.interpolationbreakpoint(distancefromfocus)
 
