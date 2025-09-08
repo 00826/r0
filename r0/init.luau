@@ -43,9 +43,9 @@ function movevectorxyz(i: Vector3, v: number, cframe: CFrame)
 end
 
 --- returns `v.Unit`, or, if `NaN`, `Vector3.zero`
-local function unit_or_zero(v: Vector3)
-	if v.Magnitude > 0 then
-		return v.Unit
+local function unitorzero(v: Vector3)
+	if vector.magnitude(v::any) > 0 then
+		return (vector.normalize(v::any)::any)::Vector3
 	else
 		return Vector3.zero
 	end
@@ -53,8 +53,9 @@ end
 
 --- returns `v` projected onto `w`
 local function project(v: Vector3, w: Vector3)
-	w = unit_or_zero(w)
-	return v:Dot(w) * w
+	w = unitorzero(w)
+
+	return vector.dot(v::any, w::any) * w
 end
 
 --- returns `v` rejected from `w`
@@ -104,7 +105,6 @@ local r0 = {
 		--- empty inputvector
 		--- `ControlScript:GetMoveVector()`
 		InputVector = Vector3.zero;
-		--- signed number
 		--- binary integer [0|1] describing upward input (jump)
 		InputUp = 0;
 		--- binary integer [0|1] describing downward input (slide)
