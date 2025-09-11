@@ -9,7 +9,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local UserGameSettings = UserSettings():GetService("UserGameSettings")
 local UserInputService = game:GetService("UserInputService")
 
-local Limiter = require(script.Parent:WaitForChild("Limiter"))
+local Viewport = require(script.Parent:WaitForChild("Viewport"))
 local Spring = require(script.Parent:WaitForChild("Spring"))
 local TransformExtrapolator = require(script.Parent:WaitForChild("TransformExtrapolator"))
 
@@ -37,11 +37,11 @@ local CameraController = {
 	--- original value: `Vector3.new(1.75, 0, 0)`
 	CameraOffset = Vector3.new(0, 0, 0);
 
-	--- camera distance limiter
-	Limiter = require(script.Parent:WaitForChild("Limiter"));
-	--- camera distance limiter extrapolator
+	--- camera distance viewport query
+	Viewport = require(script.Parent:WaitForChild("Viewport"));
+	--- camera distance extrapolator
 	Extrapolator = TransformExtrapolator.create();
-	--- camera distance limiter focus rotation
+	--- camera distance focus rotation
 	FocusRotation = CFrame.new(
 		0, 0, 0,
 		-1, 0, 0,
@@ -242,7 +242,7 @@ function CameraController.step(dt: number)
 			local rotatedfocus = CFrame.lookAlong(realfocus.Position, -realcframe.LookVector) * CameraController.FocusRotation
 
 			local extrapolationresult = TransformExtrapolator.step(extrapolator, realtime, rotatedfocus)
-			limitedzoom = Limiter.cast(realfocus * CFrame.new(0, 0, minpossiblezoom), maxpossiblezoom - minpossiblezoom, extrapolationresult) + minpossiblezoom
+			limitedzoom = Viewport.cast(realfocus * CFrame.new(0, 0, minpossiblezoom), maxpossiblezoom - minpossiblezoom, extrapolationresult) + minpossiblezoom
 			
 			limitedcframe = rotatedfocus * CFrame.new(0, 0, limitedzoom)
 		end

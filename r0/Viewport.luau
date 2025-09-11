@@ -4,10 +4,10 @@ local RunService = game:GetService("RunService")
 
 type ExtrapolateStepResult = typeof(require(script.Parent:WaitForChild("TransformExtrapolator")).step(...))
 
---- ### Limiter.luau
+--- ### Viewport.luau
 ---
---- queries viewport against workspace
-local Limiter = {
+--- viewport query functions
+local Viewport = {
 	--- camera object used by this module
 	Camera = workspace.CurrentCamera;
 
@@ -47,43 +47,43 @@ local Limiter = {
 	Blacklist = table.create(16);
 }
 
-function Limiter.cast(focus: CFrame, targetdistance: number, extrapolatorresult: ExtrapolateStepResult)
+function Viewport.cast(focus: CFrame, targetdistance: number, extrapolatorresult: ExtrapolateStepResult)
 	local realdistance = targetdistance
 
-	local softlimit, hardlimit = Limiter.queryviewport(focus, targetdistance)
+	local softlimit, hardlimit = Viewport.queryviewport(focus, targetdistance)
 	if hardlimit < realdistance then
 		realdistance = hardlimit
 	end
-	if softlimit < realdistance and Limiter.testpromotion(focus, targetdistance, extrapolatorresult) then
+	if softlimit < realdistance and Viewport.testpromotion(focus, targetdistance, extrapolatorresult) then
 		realdistance = softlimit
 	end
 
 	return realdistance
 end
 
-function Limiter.getcollisionpoint(origin: Vector3, direction: Vector3)
-	Limiter.BlacklistParams.FilterDescendantsInstances = Limiter.Blacklist
+function Viewport.getcollisionpoint(origin: Vector3, direction: Vector3)
+	Viewport.BlacklistParams.FilterDescendantsInstances = Viewport.Blacklist
 	repeat
-		local result = workspace:Raycast(origin, direction, Limiter.BlacklistParams)
+		local result = workspace:Raycast(origin, direction, Viewport.BlacklistParams)
 
 		if result then
 			if result.Instance.CanCollide then
 				return result.Position, true
 			end
-			Limiter.BlacklistParams:AddToFilter(result.Instance)
+			Viewport.BlacklistParams:AddToFilter(result.Instance)
 		end
 	until not result
 
 	return origin + direction, false
 end
 
-function Limiter.querypoint(origin: Vector3, unit: Vector3, dist: number, lastposition: Vector3?)
+function Viewport.querypoint(origin: Vector3, unit: Vector3, dist: number, lastposition: Vector3?)
 	debug.profilebegin("querypoint")
 
-	local blacklistparams = Limiter.BlacklistParams
-	local whitelistparams = Limiter.WhitelistParams
+	local blacklistparams = Viewport.BlacklistParams
+	local whitelistparams = Viewport.WhitelistParams
 
-	local nearplanez = Limiter.NearPlaneZ
+	local nearplanez = Viewport.NearPlaneZ
 
 	dist += nearplanez
 	local target = origin + unit*dist
@@ -94,7 +94,7 @@ function Limiter.querypoint(origin: Vector3, unit: Vector3, dist: number, lastpo
 
 	local piercecount = 0
 	
-	blacklistparams.FilterDescendantsInstances = Limiter.Blacklist
+	blacklistparams.FilterDescendantsInstances = Viewport.Blacklist
 	repeat
 		local entryresult = workspace:Raycast(movingorigin, target - movingorigin, blacklistparams)
 
@@ -107,9 +107,9 @@ function Limiter.querypoint(origin: Vector3, unit: Vector3, dist: number, lastpo
 		local entryinstance, entryposition = entryresult.Instance, entryresult.Position
 		local lim = (entryposition - origin).Magnitude
 
-		if piercecount >= Limiter.QueryPointCastLimit then
+		if piercecount >= Viewport.QueryPointCastLimit then
 			hardlimit = lim
-		elseif Limiter.canocclude(entryinstance) then
+		elseif Viewport.canocclude(entryinstance) then
 			whitelistparams.FilterDescendantsInstances = { entryinstance }
 
 			local exitresult = workspace:Raycast(target, entryposition - target, whitelistparams)
@@ -139,7 +139,7 @@ function Limiter.querypoint(origin: Vector3, unit: Vector3, dist: number, lastpo
 	return softlimit - nearplanez, hardlimit - nearplanez
 end
 
-function Limiter.queryviewport(focus: CFrame, distance: number)
+function Viewport.queryviewport(focus: CFrame, distance: number)
 	debug.profilebegin("queryviewport")
 
 	local focusposition = focus.Position
@@ -147,10 +147,10 @@ function Limiter.queryviewport(focus: CFrame, distance: number)
 	local focusupvector = focus.UpVector
 	local focuslookvector = -focus.LookVector
 
-	local projectionx = Limiter.ProjectionX
-	local nearplanez = Limiter.NearPlaneZ
+	local projectionx = Viewport.ProjectionX
+	local nearplanez = Viewport.NearPlaneZ
 	
-	local camera = Limiter.Camera
+	local camera = Viewport.Camera
 	local viewport = camera.ViewportSize
 
 	local hardboxlimit = math.huge
@@ -169,7 +169,7 @@ function Limiter.queryviewport(focus: CFrame, distance: number)
 				viewport.Y*viewY
 			).Origin
 
-			local softPointLimit, hardPointLimit = Limiter.querypoint(origin, focuslookvector, distance, lastPos)
+			local softPointLimit, hardPointLimit = Viewport.querypoint(origin, focuslookvector, distance, lastPos)
 
 			if hardPointLimit < hardboxlimit then
 				hardboxlimit = hardPointLimit
@@ -184,7 +184,7 @@ function Limiter.queryviewport(focus: CFrame, distance: number)
 	return softboxlimit, hardboxlimit
 end
 
-function Limiter.testpromotion(focus: CFrame, distance: number, extrapolatestepresult: ExtrapolateStepResult)
+function Viewport.testpromotion(focus: CFrame, distance: number, extrapolatestepresult: ExtrapolateStepResult)
 	debug.profilebegin("testpromotion")
 
 	local focusposition = focus.Position
@@ -202,14 +202,14 @@ function Limiter.testpromotion(focus: CFrame, distance: number, extrapolatestepr
 		local translationvelocity = extrapolatestepresult.translationvelocity
 		local rotationvelocity = extrapolatestepresult.rotationvelocity
 
-		local maxDist = (Limiter.getcollisionpoint(focusposition, translationvelocity*SAMPLE_MAX_T) - focusposition).Magnitude
+		local maxDist = (Viewport.getcollisionpoint(focusposition, translationvelocity*SAMPLE_MAX_T) - focusposition).Magnitude
 		--- Metric that decides how many samples to take
 		local combinedSpeed = vector.magnitude(translationvelocity::any)
 
 		for dt = 0, math.min(SAMPLE_MAX_T, vector.magnitude(rotationvelocity::any) + maxDist/combinedSpeed), SAMPLE_DT do
 			local extrapolatedcframewrtdt = extrapolatestepresult.extrapolate(dt) --- Extrapolated CFrame at time dt
 
-			if Limiter.querypoint(extrapolatedcframewrtdt.Position, -extrapolatedcframewrtdt.LookVector, distance) >= distance then
+			if Viewport.querypoint(extrapolatedcframewrtdt.Position, -extrapolatedcframewrtdt.LookVector, distance) >= distance then
 				return false
 			end
 		end
@@ -221,9 +221,9 @@ function Limiter.testpromotion(focus: CFrame, distance: number, extrapolatestepr
 		--- Test screen-space offsets from the focus for the presence of soft limits
 		debug.profilebegin("testoffsets")
 
-		for _, offset in ipairs(Limiter.QuerySampleOffsets) do
-			local pos = Limiter.getcollisionpoint(focusposition, focusrightvector*offset.X + focusupvector*offset.Y)
-			if Limiter.querypoint(pos, vector.normalize(focusposition::any + focuslookvector*distance - pos)::any, distance) == math.huge then
+		for _, offset in ipairs(Viewport.QuerySampleOffsets) do
+			local pos = Viewport.getcollisionpoint(focusposition, focusrightvector*offset.X + focusupvector*offset.Y)
+			if Viewport.querypoint(pos, vector.normalize(focusposition::any + focuslookvector*distance - pos)::any, distance) == math.huge then
 				return false
 			end
 		end
@@ -235,37 +235,37 @@ function Limiter.testpromotion(focus: CFrame, distance: number, extrapolatestepr
 	return true
 end
 
-function Limiter.setcamera(camera: Camera)
-	Limiter.Camera = camera
+function Viewport.setcamera(camera: Camera)
+	Viewport.Camera = camera
 
-	Limiter.projectionchanged(camera)
+	Viewport.projectionchanged(camera)
 
-	if Limiter.FieldOfViewConnection then
-		Limiter.FieldOfViewConnection:Disconnect()
-		Limiter.FieldOfViewConnection = nil
+	if Viewport.FieldOfViewConnection then
+		Viewport.FieldOfViewConnection:Disconnect()
+		Viewport.FieldOfViewConnection = nil
 	end
-	Limiter.FieldOfViewConnection = camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
-		Limiter.projectionchanged(camera)
+	Viewport.FieldOfViewConnection = camera:GetPropertyChangedSignal("FieldOfView"):Connect(function()
+		Viewport.projectionchanged(camera)
 	end)
 
-	if Limiter.ViewportSizeConnection then
-		Limiter.ViewportSizeConnection:Disconnect()
-		Limiter.ViewportSizeConnection = nil
+	if Viewport.ViewportSizeConnection then
+		Viewport.ViewportSizeConnection:Disconnect()
+		Viewport.ViewportSizeConnection = nil
 	end
-	Limiter.ViewportSizeConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
-		Limiter.projectionchanged(camera)
+	Viewport.ViewportSizeConnection = camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+		Viewport.projectionchanged(camera)
 	end)
 
-	if Limiter.NearPlaneZConnection then
-		Limiter.NearPlaneZConnection:Disconnect()
-		Limiter.NearPlaneZConnection = nil
+	if Viewport.NearPlaneZConnection then
+		Viewport.NearPlaneZConnection:Disconnect()
+		Viewport.NearPlaneZConnection = nil
 	end
-	Limiter.FieldOfViewConnection = camera:GetPropertyChangedSignal("NearPlaneZ"):Connect(function()
-		Limiter.NearPlaneZ = camera.NearPlaneZ
+	Viewport.FieldOfViewConnection = camera:GetPropertyChangedSignal("NearPlaneZ"):Connect(function()
+		Viewport.NearPlaneZ = camera.NearPlaneZ
 	end)
 end
 
-function Limiter.projectionchanged(camera: Camera)
+function Viewport.projectionchanged(camera: Camera)
 	local fieldofviewradians = math.rad(camera.FieldOfView)
 	local viewportsize = camera.ViewportSize
 	local ar = viewportsize.X / viewportsize.Y
@@ -273,37 +273,37 @@ function Limiter.projectionchanged(camera: Camera)
 	local y = 2 * math.tan(fieldofviewradians * 0.5)
 	local x = ar * y
 
-	Limiter.ProjectionY = y
-	Limiter.ProjectionX = x
+	Viewport.ProjectionY = y
+	Viewport.ProjectionX = x
 end
 
-function Limiter.gettotaltransparency(part: BasePart)
+function Viewport.gettotaltransparency(part: BasePart)
 	return 1 - (1 - part.Transparency) * (1 - part.LocalTransparencyModifier)
 end
 
-function Limiter.canocclude(part: BasePart)
+function Viewport.canocclude(part: BasePart)
 	-- Occluders must be:
 	-- 1. Opaque
 	-- 2. Interactable
 	-- 3(x). Not in the same assembly as the subject
 
 	return
-		Limiter.gettotaltransparency(part) < Limiter.TransparencyLimit and
+		Viewport.gettotaltransparency(part) < Viewport.TransparencyLimit and
 		part.CanCollide and
 		--- subjectRoot ~= (part:GetRootPart() or part) and
 		not part:IsA("TrussPart")
 end
 
 if RunService:IsClient() then
-	local WhitelistParams = Limiter.WhitelistParams
+	local WhitelistParams = Viewport.WhitelistParams
 	WhitelistParams.FilterType = Enum.RaycastFilterType.Include
-	WhitelistParams.FilterDescendantsInstances = Limiter.Whitelist
+	WhitelistParams.FilterDescendantsInstances = Viewport.Whitelist
 	
-	local BlacklistParams = Limiter.BlacklistParams
+	local BlacklistParams = Viewport.BlacklistParams
 	BlacklistParams.FilterType = Enum.RaycastFilterType.Exclude
-	BlacklistParams.FilterDescendantsInstances = Limiter.Blacklist
+	BlacklistParams.FilterDescendantsInstances = Viewport.Blacklist
 
-	Limiter.setcamera(Limiter.Camera)
+	Viewport.setcamera(Viewport.Camera)
 end
 
-return Limiter
+return Viewport
