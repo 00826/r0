@@ -153,6 +153,8 @@ local r0 = {
 		CFrame = CFrame.identity;
 		--- locomotion state
 		Locomotion = 0;
+		--- world-relative move vector
+		TrueVector = Vector3.zero;
 	};
 	LocomotionStates = {
 		"Idle";
@@ -428,6 +430,7 @@ function r0.step(character: Character, dt: number)
 	output.CFrame = rootpart.CFrame
 	output.Floor = floor
 	output.Locomotion = locomotion or 0
+	output.TrueVector = truevector
 end
 
 local replicationlen = buffer.len(r0.pack(CFrame.identity, 0, 0, 0))
